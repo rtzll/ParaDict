@@ -247,7 +247,14 @@ final class RecordingController: Sendable {
     case .succeeded:
       return
     case .empty:
-      toast.showError(title: "Empty Transcription", message: "No speech detected in recording.")
+      showOverlayStatus(
+        OverlayStatus(
+          kind: .error,
+          title: "Empty Transcription",
+          message: "No speech detected in recording."
+        ),
+        duration: 2.2
+      )
     case .failed(let message):
       toast.showError(title: "Transcription Failed", message: message)
     }
