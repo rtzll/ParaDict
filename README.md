@@ -12,6 +12,8 @@ macOS menu bar app for fast local transcription via [Parakeet](https://huggingfa
 just dev
 ```
 
+If `just dev` fails because the signing identity is missing, open Keychain Access, create a new self-signed certificate, choose `Code Signing`, name it `local-dev`, then rerun `just dev` or set `DEV_CODESIGN_IDENTITY` to a different installed identity.
+
 ## License
 
 [MIT](LICENSE)
