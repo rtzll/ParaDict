@@ -119,13 +119,15 @@ final class RecordingController: Sendable {
       recorder: recorder,
       sessionRuntime: sessionRuntime,
       mediaPlayback: mediaPlayback,
-      toast: toast,
       captureStartWorkflow: captureStartWorkflow,
       captureShutdownWorkflow: captureShutdownWorkflow,
       callbacks: RecordingSessionFlowController.Callbacks(
         stopDurationChecks: { [weak self] in self?.stopDurationChecks() },
         clearRecordingPresentation: { [weak self] in self?.clearRecordingPresentation() },
         onRecordingEnded: { [weak self] in self?.onRecordingEnded?() },
+        showOverlayStatus: { [weak self] status, duration in
+          self?.showOverlayStatus(status, duration: duration)
+        },
         onCancelComplete: { [weak self] audioURL in
           self?.showOverlayStatus(
             OverlayStatus(
@@ -219,14 +221,6 @@ final class RecordingController: Sendable {
       ),
       duration: 2.2
     )
-    toast.show(
-      ToastMessage(
-        type: .warning,
-        title: "Live Preview Unavailable",
-        message: "Recording continues, but the live transcript preview could not start."
-      ),
-      anchor: .cursor()
-    )
   }
 
   private func performIfProcessingCaptureActive(_ operation: () -> Void) {
@@ -256,7 +250,14 @@ final class RecordingController: Sendable {
         duration: 2.2
       )
     case .failed(let message):
-      toast.showError(title: "Transcription Failed", message: message)
+      showOverlayStatus(
+        OverlayStatus(
+          kind: .error,
+          title: "Transcription Failed",
+          message: message
+        ),
+        duration: 2.2
+      )
     }
   }
 

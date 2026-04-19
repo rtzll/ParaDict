@@ -6,6 +6,7 @@ final class RecordingSessionFlowController: Sendable {
     let stopDurationChecks: @MainActor () -> Void
     let clearRecordingPresentation: @MainActor () -> Void
     let onRecordingEnded: @MainActor () -> Void
+    let showOverlayStatus: @MainActor (OverlayStatus, TimeInterval) -> Void
     let onCancelComplete: @MainActor (URL?) -> Void
     let transcribe: @MainActor (CompletedRecordingCapture) async -> Void
   }
@@ -13,7 +14,6 @@ final class RecordingSessionFlowController: Sendable {
   private let recorder: AudioRecorder
   private let sessionRuntime: RecordingSessionRuntime
   private let mediaPlayback: MediaPlaybackController
-  private let toast: ToastPresenting
   private let captureStartWorkflow: RecordingCaptureStartWorkflow
   private let captureShutdownWorkflow: RecordingCaptureShutdownWorkflow
   private let callbacks: Callbacks
@@ -22,7 +22,6 @@ final class RecordingSessionFlowController: Sendable {
     recorder: AudioRecorder,
     sessionRuntime: RecordingSessionRuntime,
     mediaPlayback: MediaPlaybackController,
-    toast: ToastPresenting,
     captureStartWorkflow: RecordingCaptureStartWorkflow,
     captureShutdownWorkflow: RecordingCaptureShutdownWorkflow,
     callbacks: Callbacks
@@ -30,7 +29,6 @@ final class RecordingSessionFlowController: Sendable {
     self.recorder = recorder
     self.sessionRuntime = sessionRuntime
     self.mediaPlayback = mediaPlayback
-    self.toast = toast
     self.captureStartWorkflow = captureStartWorkflow
     self.captureShutdownWorkflow = captureShutdownWorkflow
     self.callbacks = callbacks
@@ -70,7 +68,14 @@ final class RecordingSessionFlowController: Sendable {
     sessionRuntime.clearPendingCancelShortcut()
     callbacks.clearRecordingPresentation()
     Task { await session?.cancel() }
-    toast.showError(title: "Recording Failed", message: message)
+    callbacks.showOverlayStatus(
+      OverlayStatus(
+        kind: .error,
+        title: "Recording Failed",
+        message: message
+      ),
+      2.2
+    )
     recorder.reset()
   }
 

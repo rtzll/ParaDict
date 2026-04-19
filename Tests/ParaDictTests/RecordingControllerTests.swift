@@ -100,12 +100,12 @@ struct RecordingControllerTests {
     #expect(controller.recorder.state == .idle)
     #expect(controller.recordingSessionState == .idle)
     #expect(controller.partialTranscript.isEmpty)
-    #expect(controller.overlayStatus == nil)
+    #expect(controller.overlayStatus?.kind == .error)
+    #expect(controller.overlayStatus?.title == "Recording Failed")
+    #expect(controller.overlayStatus?.message == "Mic disconnected")
     #expect(controller.overlayHint == nil)
     #expect(endedCount == 1)
-    #expect(toast.errors.count == 1)
-    #expect(toast.errors[0].title == "Recording Failed")
-    #expect(toast.errors[0].message == "Mic disconnected")
+    #expect(toast.errors.isEmpty)
   }
 
   @Test func streamingPreviewStartupFailureShowsExplicitFeedback() {
@@ -126,20 +126,7 @@ struct RecordingControllerTests {
     #expect(controller.overlayStatus?.title == "Live Preview Unavailable")
     #expect(
       controller.overlayStatus?.message == "Recording will continue without transcript preview.")
-    #expect(toast.messages.count == 1)
-    #expect(toast.messages[0].toast.title == "Live Preview Unavailable")
-
-    if case .warning = toast.messages[0].toast.type {
-      #expect(Bool(true))
-    } else {
-      Issue.record("Expected warning toast")
-    }
-
-    if case .cursor = toast.messages[0].anchor {
-      #expect(Bool(true))
-    } else {
-      Issue.record("Expected cursor-anchored toast")
-    }
+    #expect(toast.messages.isEmpty)
   }
 
   @Test func cancelRecordingShortcutShowsAttachedOverlayHintInsteadOfToast() {
@@ -320,10 +307,10 @@ struct RecordingControllerTests {
     #expect(controller.recorder.state == .idle)
     #expect(controller.recordingSessionState == .idle)
     #expect(controller.partialTranscript.isEmpty)
-    #expect(controller.overlayStatus == nil)
-    #expect(toast.errors.count == 1)
-    #expect(toast.errors[0].title == "Transcription Failed")
-    #expect(toast.errors[0].message == "transcriber exploded")
+    #expect(controller.overlayStatus?.kind == .error)
+    #expect(controller.overlayStatus?.title == "Transcription Failed")
+    #expect(controller.overlayStatus?.message == "transcriber exploded")
+    #expect(toast.errors.isEmpty)
     #expect(pasteboard.copiedTexts.isEmpty)
     #expect(analytics.calls.isEmpty)
     #expect(recordings.completedRecordings.isEmpty)
