@@ -8,15 +8,38 @@ protocol HotkeyManagerDelegate: AnyObject {
   nonisolated func hotkeyDidCancelRecording()
 }
 
+/// Thread-safe box for the recording-active flag. Accessed from both the
+/// @MainActor (writes) and the event-tap thread (reads), so mutations are
+/// protected by an NSLock.
+private final class RecordingActiveState: @unchecked Sendable {
+  private let lock = NSLock()
+  private var isRecording = false
+
+  func start() {
+    lock.lock()
+    isRecording = true
+    lock.unlock()
+  }
+
+  func end() {
+    lock.lock()
+    isRecording = false
+    lock.unlock()
+  }
+
+  var active: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return isRecording
+  }
+}
+
 @MainActor
 final class HotkeyManager {
   weak var delegate: HotkeyManagerDelegate?
 
   private let shortcutMonitor = CustomShortcutMonitor.shared
-
-  /// Thread-safe flag for cancel shortcut's enabled check (accessed from event tap thread)
-  nonisolated(unsafe) var _recordingActive = false
-  let recordingActiveLock = NSLock()
+  private let recordingState = RecordingActiveState()
 
   func start() {
     setupToggleRecording()
@@ -33,15 +56,11 @@ final class HotkeyManager {
   }
 
   func recordingDidStart() {
-    recordingActiveLock.lock()
-    _recordingActive = true
-    recordingActiveLock.unlock()
+    recordingState.start()
   }
 
   func recordingDidEnd() {
-    recordingActiveLock.lock()
-    _recordingActive = false
-    recordingActiveLock.unlock()
+    recordingState.end()
   }
 
   private func setupToggleRecording() {
@@ -51,28 +70,11 @@ final class HotkeyManager {
   }
 
   private func setupCancelRecording() {
-    let checker = RecordingActiveChecker(manager: self)
-    shortcutMonitor.setEnabledCheck(for: .cancelRecording) {
-      checker.isActive
+    shortcutMonitor.setEnabledCheck(for: .cancelRecording) { [recordingState] in
+      recordingState.active
     }
     shortcutMonitor.onKeyUp(for: .cancelRecording) { [weak self] in
       self?.delegate?.hotkeyDidCancelRecording()
     }
-  }
-}
-
-/// Thread-safe Sendable helper for checking recording state from the event tap thread
-private final class RecordingActiveChecker: @unchecked Sendable {
-  private weak var manager: HotkeyManager?
-
-  init(manager: HotkeyManager) {
-    self.manager = manager
-  }
-
-  var isActive: Bool {
-    guard let manager else { return false }
-    manager.recordingActiveLock.lock()
-    defer { manager.recordingActiveLock.unlock() }
-    return manager._recordingActive
   }
 }

@@ -5,6 +5,10 @@ import os.log
 
 private let log = Logger(subsystem: Logger.subsystem, category: "EventTap")
 
+/// All mutable state is isolated to `@MainActor` except `callback`, which is
+/// set once before the tap starts and never mutated afterward. The C callback
+/// may read `callback` from the event-tap thread, but the value is effectively
+/// immutable after setup.
 final class EventTapManager: @unchecked Sendable {
   typealias EventCallback = (CGEventType, CGEvent) -> Bool
 

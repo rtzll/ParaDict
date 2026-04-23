@@ -11,6 +11,8 @@ protocol MediaRemoteClient: Sendable {
 // Detection uses CoreAudio (public API, works from signed apps).
 // Commands use MediaRemote.framework via dlopen (send commands work from signed apps,
 // only queries are blocked).
+// Safe as Sendable because all instance state is immutable after initialization
+// (`handle` and `sendCommand` are `static let`).
 final class MediaRemoteFramework: MediaRemoteClient, @unchecked Sendable {
   nonisolated(unsafe) private static let handle: UnsafeMutableRawPointer? =
     dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_NOW)

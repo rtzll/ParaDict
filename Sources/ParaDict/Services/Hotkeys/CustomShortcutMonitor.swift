@@ -5,6 +5,9 @@ import os.log
 
 private let log = Logger(subsystem: Logger.subsystem, category: "ShortcutMonitor")
 
+/// `activeShortcuts` is protected by `activeShortcutsLock`. All other
+/// dependencies (`shortcutMatcher`, `handlerRegistry`, `fnStateMachine`) use
+/// their own internal synchronization.
 final class CustomShortcutMonitor: @unchecked Sendable {
   typealias ShortcutHandler = @Sendable @MainActor () -> Void
   typealias ShortcutEnabledCheck = @Sendable () -> Bool

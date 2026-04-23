@@ -1,5 +1,6 @@
 import Foundation
 
+/// All mutable state is protected by `NSLock`.
 final class FnStateMachine: @unchecked Sendable {
   enum FnEventResult {
     case none

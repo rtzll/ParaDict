@@ -16,6 +16,9 @@ protocol PasteboardScheduler: Sendable {
   func schedule(after delay: TimeInterval, _ operation: @escaping @Sendable () -> Void)
 }
 
+/// Wraps `NSPasteboard`, which is not declared `Sendable` but is documented
+/// as safe to use from multiple threads. All mutations are serialized through
+/// the single shared pasteboard instance.
 private final class SystemPasteboardAccess: PasteboardAccess, @unchecked Sendable {
   private let pasteboard = NSPasteboard.general
 
@@ -69,7 +72,7 @@ private struct DispatchPasteboardScheduler: PasteboardScheduler {
   }
 }
 
-final class PasteboardService: @unchecked Sendable {
+final class PasteboardService: Sendable {
   private let logger = Logger(subsystem: Logger.subsystem, category: "PasteboardService")
   private let pasteboard: PasteboardAccess
   private let scheduler: PasteboardScheduler

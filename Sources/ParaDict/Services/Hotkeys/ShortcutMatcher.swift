@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+/// All mutable state (`shortcuts`) is protected by `NSLock`.
 final class ShortcutMatcher: @unchecked Sendable {
   struct MatchResult {
     let name: CustomShortcutName

@@ -40,8 +40,12 @@ struct StreamingAgreementConfig: Sendable {
 /// Local-agreement decoder: accumulates transcription passes and promotes a
 /// prefix to "confirmed" once successive passes agree on it. Everything after
 /// the confirmed prefix is treated as a fluid hypothesis that can still change.
-final class StreamingAgreementEngine: @unchecked Sendable {
-  private let config: StreamingAgreementConfig
+/// Safe to share across isolation boundaries because it is stored as a `var`
+/// property inside `ParakeetStreamingSession` (an actor), which serializes all
+/// access. As a struct with only Sendable stored properties, it conforms to
+/// `Sendable` automatically.
+struct StreamingAgreementEngine: Sendable {
+  private var config: StreamingAgreementConfig
 
   private var confirmedWords: [StreamingWord] = []
   private var previousWords: [StreamingWord] = []
@@ -55,7 +59,7 @@ final class StreamingAgreementEngine: @unchecked Sendable {
     self.config = config
   }
 
-  func reset() {
+  mutating func reset() {
     confirmedWords = []
     previousWords = []
     consecutiveAgreementCount = 0
@@ -64,7 +68,7 @@ final class StreamingAgreementEngine: @unchecked Sendable {
     hypothesisStartTime = 0
   }
 
-  func process(words: [StreamingWord], confidence: Float) -> StreamingAgreementResult {
+  mutating func process(words: [StreamingWord], confidence: Float) -> StreamingAgreementResult {
     guard !words.isEmpty else {
       return makeResult(hypothesisWords: [])
     }

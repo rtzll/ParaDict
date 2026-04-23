@@ -1,5 +1,6 @@
 import Foundation
 
+/// All mutable state is protected by `NSLock`.
 final class ShortcutHandlerRegistry: @unchecked Sendable {
   typealias ShortcutHandler = @Sendable @MainActor () -> Void
   typealias ShortcutEnabledCheck = @Sendable () -> Bool

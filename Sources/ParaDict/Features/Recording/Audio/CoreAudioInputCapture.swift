@@ -9,6 +9,11 @@ struct CaptureSessionInfo: Sendable {
   let sampleRate: Double
 }
 
+/// Accessed from both the control queue and CoreAudio real-time callbacks.
+/// The audio callback reads `isRecording` and buffer pointers; start/stop
+/// sequence these so the callback never sees partial teardown state.
+/// Closure properties (`onRMS`, `onAudioChunk`, `onSessionFailure`) must be
+/// set before `startRecording` and not modified while recording.
 final class CoreAudioInputCapture: @unchecked Sendable {
   private let logger = Logger(subsystem: Logger.subsystem, category: "CoreAudioInputCapture")
   private let controlQueue: DispatchQueue

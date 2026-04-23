@@ -2,6 +2,9 @@ import AVFoundation
 @preconcurrency import FluidAudio
 import Foundation
 
+/// Wraps `AsyncStream.Continuation` so it can be stored in the actor and
+/// yielded to from `nonisolated` callers. `Continuation` is internally
+/// thread-safe by design.
 private final class StreamingChunkSource: @unchecked Sendable {
   let stream: AsyncStream<Data>
   private let continuation: AsyncStream<Data>.Continuation
@@ -23,7 +26,7 @@ private final class StreamingChunkSource: @unchecked Sendable {
 
 actor ParakeetStreamingSession {
   private let chunkSource = StreamingChunkSource()
-  private let agreementEngine = StreamingAgreementEngine()
+  private var agreementEngine = StreamingAgreementEngine()
 
   private var manager: AsrManager?
   private var inputSampleRate: Double = 16_000
