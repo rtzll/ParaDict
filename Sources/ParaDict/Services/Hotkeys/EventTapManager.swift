@@ -11,9 +11,17 @@ final class EventTapManager: @unchecked Sendable {
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
   private var callback: EventCallback?
+  private var retainedRefcon: UnsafeMutableRawPointer?
 
   func setEventCallback(_ callback: @escaping EventCallback) {
     self.callback = callback
+  }
+
+  deinit {
+    if let refcon = retainedRefcon {
+      Unmanaged<EventTapManager>.fromOpaque(refcon).release()
+      retainedRefcon = nil
+    }
   }
 
   @MainActor
@@ -38,6 +46,10 @@ final class EventTapManager: @unchecked Sendable {
       CGEvent.tapEnable(tap: tap, enable: false)
       eventTap = nil
     }
+    if let refcon = retainedRefcon {
+      Unmanaged<EventTapManager>.fromOpaque(refcon).release()
+      retainedRefcon = nil
+    }
     log.info("Event tap stopped")
   }
 
@@ -56,7 +68,7 @@ final class EventTapManager: @unchecked Sendable {
       | (1 << CGEventType.keyUp.rawValue)
       | (1 << CGEventType.flagsChanged.rawValue)
 
-    let refcon = Unmanaged.passUnretained(self).toOpaque()
+    let refcon = Unmanaged.passRetained(self).toOpaque()
 
     guard
       let tap = CGEvent.tapCreate(
@@ -86,6 +98,7 @@ final class EventTapManager: @unchecked Sendable {
         userInfo: refcon
       )
     else {
+      Unmanaged<EventTapManager>.fromOpaque(refcon).release()
       log.error("Failed to create event tap (attempt \(retryCount + 1)/10)")
       if retryCount < 10 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -97,6 +110,7 @@ final class EventTapManager: @unchecked Sendable {
       return
     }
 
+    retainedRefcon = refcon
     eventTap = tap
     let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
     runLoopSource = source
