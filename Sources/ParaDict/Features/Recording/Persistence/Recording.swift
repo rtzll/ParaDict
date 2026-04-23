@@ -91,8 +91,7 @@ struct Recording: Codable, Identifiable, Equatable, Hashable, Sendable {
   }
 
   static func generateId() -> String {
-    let ms = Int(Date().timeIntervalSince1970 * 1000)
-    return String(ms)
+    return UUID().uuidString
   }
 
   static func completed(
