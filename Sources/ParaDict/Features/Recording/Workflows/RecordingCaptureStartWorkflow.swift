@@ -14,7 +14,7 @@ protocol RecordingCapturePreparing: AnyObject {
   func startStreamingPreview(
     for session: PendingRecordingSession,
     inputSampleRate: Double,
-    onPartialTranscript: @escaping @MainActor (String) -> Void
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async -> Result<Void, Error>
 }
 
@@ -24,7 +24,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     let isModelLoaded: @MainActor () -> Bool
     let clearOverlayStatus: @MainActor () -> Void
     let startDurationChecks: @MainActor () -> Void
-    let onPartialTranscript: @MainActor (String) -> Void
+    let onPreviewUpdate: @MainActor (StreamingPreviewUpdate) -> Void
     let onPreviewStartupFailure: @MainActor () -> Void
     let onRecordingStarted: @MainActor () -> Void
   }
@@ -103,7 +103,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
         ))
     }
 
-    callbacks.onPartialTranscript("")
+    callbacks.onPreviewUpdate(.reset)
     recorder.onAudioChunk = { data in
       preparedSession.session.streamingSession.send(data)
     }
@@ -128,7 +128,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
       recorder.reset()
       sessionRuntime.clearActiveCapture()
       sessionRuntime.markStartFailed()
-      callbacks.onPartialTranscript("")
+      callbacks.onPreviewUpdate(.reset)
       recorder.onAudioChunk = nil
       await session.streamingSession.cancel()
       return false
@@ -139,8 +139,8 @@ final class RecordingCaptureStartWorkflow: Sendable {
     let result = await capturePreparationWorkflow.startStreamingPreview(
       for: session,
       inputSampleRate: recorder.actualSampleRate
-    ) { [callbacks] text in
-      callbacks.onPartialTranscript(text)
+    ) { [callbacks] update in
+      callbacks.onPreviewUpdate(update)
     }
 
     switch result {

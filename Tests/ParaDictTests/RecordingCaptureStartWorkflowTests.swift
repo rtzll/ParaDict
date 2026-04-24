@@ -19,7 +19,7 @@ struct RecordingCaptureStartWorkflowTests {
         isModelLoaded: { false },
         clearOverlayStatus: {},
         startDurationChecks: {},
-        onPartialTranscript: { _ in },
+        onPreviewUpdate: { _ in },
         onPreviewStartupFailure: {},
         onRecordingStarted: {}
       )
@@ -49,7 +49,7 @@ struct RecordingCaptureStartWorkflowTests {
         isModelLoaded: { true },
         clearOverlayStatus: {},
         startDurationChecks: {},
-        onPartialTranscript: { _ in },
+        onPreviewUpdate: { _ in },
         onPreviewStartupFailure: {},
         onRecordingStarted: {}
       )
@@ -101,7 +101,11 @@ struct RecordingCaptureStartWorkflowTests {
         isModelLoaded: { true },
         clearOverlayStatus: {},
         startDurationChecks: {},
-        onPartialTranscript: { partialTranscript = $0 },
+        onPreviewUpdate: { update in
+          if case .reset = update {
+            partialTranscript = ""
+          }
+        },
         onPreviewStartupFailure: {},
         onRecordingStarted: {}
       )
@@ -152,7 +156,7 @@ private final class WorkflowCapturePreparing: RecordingCapturePreparing, @unchec
   func startStreamingPreview(
     for session: PendingRecordingSession,
     inputSampleRate: Double,
-    onPartialTranscript: @escaping @MainActor (String) -> Void
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async -> Result<Void, Error> {
     previewResult
   }

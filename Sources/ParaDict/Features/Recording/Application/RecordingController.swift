@@ -16,6 +16,8 @@ final class RecordingController: Sendable {
   private let analyticsRecording: AnalyticsRecording
   private let pasteboardWriter: PasteboardWriting
   private let sessionRuntime: RecordingSessionRuntime
+  @ObservationIgnored
+  private var streamingTranscriptAccumulator = StreamingTranscriptAccumulator()
   var partialTranscript = ""
   var overlayStatus: OverlayStatus?
   var overlayHint: OverlayHint? { sessionRuntime.overlayHint }
@@ -104,7 +106,7 @@ final class RecordingController: Sendable {
         isModelLoaded: { [weak self] in self?.isModelLoaded == true },
         clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() },
         startDurationChecks: { [weak self] in self?.startDurationChecks() },
-        onPartialTranscript: { [weak self] text in self?.partialTranscript = text },
+        onPreviewUpdate: { [weak self] update in self?.applyStreamingPreviewUpdate(update) },
         onPreviewStartupFailure: { [weak self] in self?.handleStreamingPreviewStartupFailure() },
         onRecordingStarted: { [weak self] in self?.onRecordingStarted?() }
       )
@@ -211,7 +213,7 @@ final class RecordingController: Sendable {
   }
 
   func handleStreamingPreviewStartupFailure() {
-    partialTranscript = ""
+    resetStreamingPreview()
     recorder.onAudioChunk = nil
     showOverlayStatus(
       OverlayStatus(
@@ -296,8 +298,23 @@ final class RecordingController: Sendable {
   }
 
   private func clearRecordingPresentation() {
-    partialTranscript = ""
+    resetStreamingPreview()
     clearOverlayStatus()
+  }
+
+  private func applyStreamingPreviewUpdate(_ update: StreamingPreviewUpdate) {
+    if case .reset = update {
+      _ = streamingTranscriptAccumulator.apply(update)
+      partialTranscript = ""
+      return
+    }
+
+    guard streamingTranscriptAccumulator.apply(update) else { return }
+    partialTranscript = streamingTranscriptAccumulator.displayText
+  }
+
+  private func resetStreamingPreview() {
+    applyStreamingPreviewUpdate(.reset)
   }
 
   func reloadShortcuts() {

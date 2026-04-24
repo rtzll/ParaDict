@@ -27,14 +27,18 @@ struct StreamingWord: Sendable {
 
 struct StreamingAgreementResult: Sendable {
   let fullText: String
+  let newlyConfirmedText: String
 }
 
 struct StreamingAgreementConfig: Sendable {
-  var transcribeIntervalSeconds: Double = 0.8
-  var confirmationsNeeded: Int = 2
-  var minWordsToConfirm: Int = 3
-  var minPassConfidence: Float = 0.12
-  var minBoundaryConfidence: Float = 0.45
+  var transcribeIntervalSeconds: Double = 1.0
+  var confirmationsNeeded: Int = 3
+  var minWordsToConfirm: Int = 5
+  var minPassConfidence: Float = 0.15
+  var minBoundaryConfidence: Float = 0.6
+  var boundaryConfidenceWordCount: Int = 3
+  var trailingSentencesToKeep: Int = 2
+  var trailingSilenceSeconds: Double = 1.0
 }
 
 /// Local-agreement decoder: accumulates transcription passes and promotes a
@@ -54,6 +58,7 @@ struct StreamingAgreementEngine: Sendable {
 
   private(set) var confirmedEndTime: Double = 0
   private(set) var hypothesisStartTime: Double = 0
+  var confirmedText: String { confirmedWords.map(\.text).joined(separator: " ") }
 
   init(config: StreamingAgreementConfig = StreamingAgreementConfig()) {
     self.config = config
@@ -70,21 +75,19 @@ struct StreamingAgreementEngine: Sendable {
 
   mutating func process(words: [StreamingWord], confidence: Float) -> StreamingAgreementResult {
     guard !words.isEmpty else {
-      return makeResult(hypothesisWords: [])
+      return makeResult(hypothesisWords: [], newlyConfirmedWords: [])
     }
 
     if isFirstPass {
       isFirstPass = false
       previousWords = words
-      hypothesisStartTime = words.first?.startTime ?? 0
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
     if confidence < config.minPassConfidence {
       consecutiveAgreementCount = 0
       previousWords = words
-      hypothesisStartTime = words.first?.startTime ?? confirmedEndTime
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
     let prefix = commonPrefix(current: words, previous: previousWords)
@@ -94,26 +97,22 @@ struct StreamingAgreementEngine: Sendable {
       consecutiveAgreementCount += 1
     } else {
       consecutiveAgreementCount = 0
-      hypothesisStartTime = words.first?.startTime ?? confirmedEndTime
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
     guard consecutiveAgreementCount >= config.confirmationsNeeded else {
-      hypothesisStartTime = words.first?.startTime ?? confirmedEndTime
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
     let confirmCount = confirmationBoundary(in: Array(words.prefix(prefix.count)))
     guard confirmCount > 0 else {
-      hypothesisStartTime = words.first?.startTime ?? confirmedEndTime
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
-    let boundaryWords = Array(words.prefix(confirmCount).suffix(2))
+    let boundaryWords = Array(words.prefix(confirmCount).suffix(config.boundaryConfidenceWordCount))
     let minConfidence = boundaryWords.map(\.confidence).min() ?? 1
     guard minConfidence >= config.minBoundaryConfidence else {
-      hypothesisStartTime = words.first?.startTime ?? confirmedEndTime
-      return makeResult(hypothesisWords: words)
+      return makeResult(hypothesisWords: words, newlyConfirmedWords: [])
     }
 
     let newlyConfirmed = Array(words.prefix(confirmCount))
@@ -127,7 +126,7 @@ struct StreamingAgreementEngine: Sendable {
     previousWords = hypothesis
     isFirstPass = hypothesis.isEmpty
 
-    return makeResult(hypothesisWords: hypothesis)
+    return makeResult(hypothesisWords: hypothesis, newlyConfirmedWords: newlyConfirmed)
   }
 
   private func commonPrefix(current: [StreamingWord], previous: [StreamingWord]) -> [StreamingWord]
@@ -149,20 +148,32 @@ struct StreamingAgreementEngine: Sendable {
   private func confirmationBoundary(in words: [StreamingWord]) -> Int {
     guard words.count >= config.minWordsToConfirm else { return 0 }
 
-    let sentenceEnders: Set<Character> = [".", "!", "?", ";", ","]
-    for index in stride(from: words.count - 1, through: 0, by: -1) {
+    let sentenceEnders: Set<Character> = [".", "!", "?", ";"]
+    var boundaryIndices: [Int] = []
+    for index in 0..<words.count {
       if let last = words[index].text.last, sentenceEnders.contains(last) {
-        return index + 1
+        boundaryIndices.append(index)
       }
     }
 
-    return max(0, words.count - 2)
+    let requiredBoundaries = config.trailingSentencesToKeep + 1
+    guard boundaryIndices.count >= requiredBoundaries else { return 0 }
+
+    let cutIndex = boundaryIndices[boundaryIndices.count - requiredBoundaries]
+    let confirmCount = cutIndex + 1
+    guard confirmCount >= config.minWordsToConfirm else { return 0 }
+
+    return confirmCount
   }
 
-  private func makeResult(hypothesisWords: [StreamingWord]) -> StreamingAgreementResult {
+  private func makeResult(
+    hypothesisWords: [StreamingWord],
+    newlyConfirmedWords: [StreamingWord]
+  ) -> StreamingAgreementResult {
     var parts: [String] = []
-    let confirmed = confirmedWords.map(\.text).joined(separator: " ")
+    let confirmed = confirmedText
     let hypothesis = hypothesisWords.map(\.text).joined(separator: " ")
+    let newlyConfirmed = newlyConfirmedWords.map(\.text).joined(separator: " ")
 
     if !confirmed.isEmpty {
       parts.append(confirmed)
@@ -172,6 +183,8 @@ struct StreamingAgreementEngine: Sendable {
     }
 
     return StreamingAgreementResult(
-      fullText: parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines))
+      fullText: parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines),
+      newlyConfirmedText: newlyConfirmed
+    )
   }
 }

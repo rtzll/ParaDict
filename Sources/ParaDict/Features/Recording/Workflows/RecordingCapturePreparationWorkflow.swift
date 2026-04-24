@@ -66,14 +66,14 @@ final class RecordingCapturePreparationWorkflow: Sendable {
   func startStreamingPreview(
     for session: PendingRecordingSession,
     inputSampleRate: Double,
-    onPartialTranscript: @escaping @MainActor (String) -> Void
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async -> Result<Void, Error> {
     do {
       let models = try await modelProvider.models()
       try await session.streamingSession.start(
         models: models,
         inputSampleRate: inputSampleRate,
-        onPartialTranscript: onPartialTranscript
+        onPreviewUpdate: onPreviewUpdate
       )
       return .success(())
     } catch {

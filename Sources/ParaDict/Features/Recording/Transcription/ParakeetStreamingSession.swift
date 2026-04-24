@@ -24,9 +24,40 @@ private final class StreamingChunkSource: @unchecked Sendable {
   }
 }
 
+struct StreamingTranscriptionWindow: Equatable, Sendable {
+  let samples: [Float]
+  let timeOffset: Double
+
+  static func make(
+    audioBuffer: [Float],
+    trimmedSampleCount: Int,
+    bufferRelativeSeek: Int,
+    inputSampleRate: Double,
+    trailingSilenceSeconds: Double,
+    maxSinglePassSeconds: Double = 15.0
+  ) -> StreamingTranscriptionWindow? {
+    guard bufferRelativeSeek < audioBuffer.count else { return nil }
+
+    var samples = Array(audioBuffer[bufferRelativeSeek...])
+    guard samples.count >= Int(inputSampleRate) else { return nil }
+
+    let maxSinglePassSamples = Int(inputSampleRate * maxSinglePassSeconds)
+    let trailingSilenceSamples = Int(inputSampleRate * trailingSilenceSeconds)
+    if trailingSilenceSamples > 0, samples.count + trailingSilenceSamples <= maxSinglePassSamples {
+      samples += [Float](repeating: 0, count: trailingSilenceSamples)
+    }
+
+    return StreamingTranscriptionWindow(
+      samples: samples,
+      timeOffset: Double(trimmedSampleCount + bufferRelativeSeek) / inputSampleRate
+    )
+  }
+}
+
 actor ParakeetStreamingSession {
   private let chunkSource = StreamingChunkSource()
-  private var agreementEngine = StreamingAgreementEngine()
+  private let agreementConfig = StreamingAgreementConfig()
+  private var agreementEngine: StreamingAgreementEngine
 
   private var manager: AsrManager?
   private var inputSampleRate: Double = 16_000
@@ -36,7 +67,11 @@ actor ParakeetStreamingSession {
   private var trimmedSampleCount = 0
   private var lastProcessedSampleCount = 0
   private var isTranscribing = false
-  private var onPartialTranscript: (@MainActor (String) -> Void)?
+  private var onPreviewUpdate: (@MainActor (StreamingPreviewUpdate) -> Void)?
+
+  init() {
+    agreementEngine = StreamingAgreementEngine(config: agreementConfig)
+  }
 
   nonisolated func send(_ data: Data) {
     chunkSource.send(data)
@@ -45,14 +80,14 @@ actor ParakeetStreamingSession {
   func start(
     models: AsrModels,
     inputSampleRate: Double,
-    onPartialTranscript: @escaping @MainActor (String) -> Void
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async throws {
     let manager = AsrManager(config: .default)
     try await manager.initialize(models: models)
 
     self.manager = manager
     self.inputSampleRate = inputSampleRate
-    self.onPartialTranscript = onPartialTranscript
+    self.onPreviewUpdate = onPreviewUpdate
     self.audioBuffer = []
     self.trimmedSampleCount = 0
     self.lastProcessedSampleCount = 0
@@ -67,7 +102,7 @@ actor ParakeetStreamingSession {
 
     transcriptionLoopTask = Task {
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(StreamingAgreementConfig().transcribeIntervalSeconds))
+        try? await Task.sleep(for: .seconds(agreementConfig.transcribeIntervalSeconds))
         await self.runTranscriptionPass()
       }
     }
@@ -83,7 +118,7 @@ actor ParakeetStreamingSession {
     trimmedSampleCount = 0
     lastProcessedSampleCount = 0
     isTranscribing = false
-    onPartialTranscript = nil
+    onPreviewUpdate = nil
     agreementEngine.reset()
     manager = nil
   }
@@ -103,9 +138,9 @@ actor ParakeetStreamingSession {
     guard let manager else { return }
 
     let absoluteSampleCount = trimmedSampleCount + audioBuffer.count
-    let minNewSamples = Int(inputSampleRate * 0.45)
+    let minNewSamples = Int(inputSampleRate * 0.5)
     guard absoluteSampleCount - lastProcessedSampleCount >= minNewSamples else { return }
-    guard absoluteSampleCount >= Int(inputSampleRate * 0.8) else { return }
+    guard absoluteSampleCount >= Int(inputSampleRate) else { return }
 
     isTranscribing = true
     defer { isTranscribing = false }
@@ -117,17 +152,19 @@ actor ParakeetStreamingSession {
     let bufferRelativeSeek = max(0, seekSample - trimmedSampleCount)
     guard bufferRelativeSeek < audioBuffer.count else { return }
 
-    var samples = Array(audioBuffer[bufferRelativeSeek...])
-    if samples.count < Int(inputSampleRate) {
+    guard
+      let window = StreamingTranscriptionWindow.make(
+        audioBuffer: audioBuffer,
+        trimmedSampleCount: trimmedSampleCount,
+        bufferRelativeSeek: bufferRelativeSeek,
+        inputSampleRate: inputSampleRate,
+        trailingSilenceSeconds: agreementConfig.trailingSilenceSeconds
+      )
+    else {
       return
     }
 
-    let maxSamples = Int(inputSampleRate * 12.0)
-    if samples.count > maxSamples {
-      samples = Array(samples.suffix(maxSamples))
-    }
-
-    guard let buffer = Self.makePCMBuffer(from: samples, sampleRate: inputSampleRate) else {
+    guard let buffer = Self.makePCMBuffer(from: window.samples, sampleRate: inputSampleRate) else {
       return
     }
 
@@ -138,17 +175,20 @@ actor ParakeetStreamingSession {
       guard let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty else {
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {
-          await onPartialTranscript?(text)
+          await onPreviewUpdate?(.partial(text))
         }
         return
       }
 
-      let words = Self.mergeTokensToWords(tokenTimings, timeOffset: seekTime)
+      let words = Self.mergeTokensToWords(tokenTimings, timeOffset: window.timeOffset)
       guard !words.isEmpty else { return }
 
       let agreementResult = agreementEngine.process(words: words, confidence: result.confidence)
+      if !agreementResult.newlyConfirmedText.isEmpty {
+        await onPreviewUpdate?(.committed(agreementResult.newlyConfirmedText))
+      }
       if !agreementResult.fullText.isEmpty {
-        await onPartialTranscript?(agreementResult.fullText)
+        await onPreviewUpdate?(.partial(agreementResult.fullText))
       }
 
       let trimSample = max(0, Int(agreementEngine.hypothesisStartTime * inputSampleRate))
