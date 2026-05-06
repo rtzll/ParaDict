@@ -28,6 +28,16 @@ dev: kill package
 build:
     swift build --disable-sandbox --product ParaDict
 
+# Update SwiftPM dependencies and verify the app still builds, tests, and packages
+[group('build')]
+update:
+    swift package update --disable-sandbox
+    just verify
+
+# Build, test, and package the app
+[group('build')]
+verify: build test package
+
 # Create .app bundle (debug)
 [group('build')]
 package:
