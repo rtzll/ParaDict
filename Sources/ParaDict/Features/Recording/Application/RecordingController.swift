@@ -2,7 +2,6 @@ import AppKit
 @preconcurrency import FluidAudio
 import Foundation
 import Observation
-import UserNotifications
 
 @Observable
 @MainActor
@@ -29,7 +28,7 @@ final class RecordingController: Sendable {
   @ObservationIgnored
   private var durationMonitor: RecordingDurationMonitor!
   @ObservationIgnored
-  private var overlayStatusPresenter: OverlayStatusPresenter!
+  private var feedbackPresenter: RecordingFeedbackPresenter!
   @ObservationIgnored
   private var transcriptionWorkflow: RecordingTranscriptionWorkflow!
   @ObservationIgnored
@@ -86,7 +85,7 @@ final class RecordingController: Sendable {
     recorder.onRecordingInterrupted = { [weak self] message in
       self?.handleRecordingInterrupted(message: message)
     }
-    overlayStatusPresenter = OverlayStatusPresenter { [weak self] status in
+    feedbackPresenter = RecordingFeedbackPresenter(toast: toast) { [weak self] status in
       self?.overlayStatus = status
     }
     transcriptionWorkflow = RecordingTranscriptionWorkflow(
@@ -105,7 +104,7 @@ final class RecordingController: Sendable {
       sessionRuntime: sessionRuntime,
       modelReadiness: self.modelReadiness,
       capturePreparationWorkflow: capturePreparationWorkflow,
-      toast: toast,
+      feedbackPresenter: feedbackPresenter,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
         clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() },
         startDurationChecks: { [weak self] in self?.startDurationChecks() },
@@ -130,17 +129,11 @@ final class RecordingController: Sendable {
         stopDurationChecks: { [weak self] in self?.stopDurationChecks() },
         clearRecordingPresentation: { [weak self] in self?.clearRecordingPresentation() },
         onRecordingEnded: { [weak self] in self?.onRecordingEnded?() },
-        showOverlayStatus: { [weak self] status, duration in
-          self?.showOverlayStatus(status, duration: duration)
+        presentFeedback: { [weak self] feedback in
+          self?.presentFeedback(feedback)
         },
         onCancelComplete: { [weak self] audioURL in
-          self?.showOverlayStatus(
-            OverlayStatus(
-              kind: .warning,
-              title: "Recording Canceled",
-              message: "Discarded the current recording."
-            )
-          )
+          self?.presentFeedback(.init(.recordingCanceled))
           if let audioURL {
             try? FileManager.default.removeItem(at: audioURL)
           }
@@ -222,14 +215,7 @@ final class RecordingController: Sendable {
   func handleStreamingPreviewStartupFailure() {
     resetStreamingPreview()
     recorder.onAudioChunk = nil
-    showOverlayStatus(
-      OverlayStatus(
-        kind: .warning,
-        title: "Live Preview Unavailable",
-        message: "Recording will continue without transcript preview."
-      ),
-      duration: 2.2
-    )
+    presentFeedback(.init(.livePreviewUnavailable))
   }
 
   private func performIfProcessingCaptureActive(_ operation: () -> Void) {
@@ -250,23 +236,9 @@ final class RecordingController: Sendable {
     case .succeeded:
       return
     case .empty:
-      showOverlayStatus(
-        OverlayStatus(
-          kind: .error,
-          title: "Empty Transcription",
-          message: "No speech detected in recording."
-        ),
-        duration: 2.2
-      )
+      presentFeedback(.init(.emptyTranscription))
     case .failed(let message):
-      showOverlayStatus(
-        OverlayStatus(
-          kind: .error,
-          title: "Transcription Failed",
-          message: message
-        ),
-        duration: 2.2
-      )
+      presentFeedback(.init(.transcriptionFailed(message)))
     }
   }
 
@@ -279,25 +251,7 @@ final class RecordingController: Sendable {
   }
 
   private func presentDurationWarning(remainingSeconds: Int) {
-    toast.show(
-      ToastMessage(
-        type: .warning,
-        title: "Recording Limit",
-        message: "Recording will stop in \(remainingSeconds / 60) min \(remainingSeconds % 60) sec"
-      )
-    )
-
-    let content = UNMutableNotificationContent()
-    content.title = "Recording Limit"
-    content.body = "Recording will automatically stop in ~2 minutes"
-    let request = UNNotificationRequest(
-      identifier: "recording-warning",
-      content: content,
-      trigger: nil
-    )
-    Task {
-      try? await UNUserNotificationCenter.current().add(request)
-    }
+    presentFeedback(.init(.recordingLimitWarning(remainingSeconds: remainingSeconds)))
   }
 
   private func handleRecordingInterrupted(message: String) {
@@ -328,12 +282,12 @@ final class RecordingController: Sendable {
     CustomShortcutMonitor.shared.reloadShortcuts()
   }
 
-  private func showOverlayStatus(_ status: OverlayStatus, duration: TimeInterval = 1.4) {
-    overlayStatusPresenter.show(status, duration: duration)
+  private func presentFeedback(_ feedback: RecordingFeedback) {
+    feedbackPresenter.present(feedback)
   }
 
   private func clearOverlayStatus() {
-    overlayStatusPresenter.clear()
+    feedbackPresenter.clearOverlayStatus()
   }
 }
 

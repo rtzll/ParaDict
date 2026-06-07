@@ -19,7 +19,7 @@ struct RecordingCaptureStartWorkflowTests {
           message: "Please wait for Parakeet to finish loading."
         )),
       capturePreparationWorkflow: WorkflowCapturePreparing(),
-      toast: toast,
+      feedbackPresenter: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
         clearOverlayStatus: {},
         startDurationChecks: {},
@@ -49,7 +49,7 @@ struct RecordingCaptureStartWorkflowTests {
       sessionRuntime: sessionRuntime,
       modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
-      toast: toast,
+      feedbackPresenter: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
         clearOverlayStatus: {},
         startDurationChecks: {},
@@ -101,7 +101,7 @@ struct RecordingCaptureStartWorkflowTests {
       sessionRuntime: sessionRuntime,
       modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
-      toast: toast,
+      feedbackPresenter: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
         clearOverlayStatus: {},
         startDurationChecks: {},
@@ -191,18 +191,26 @@ private final class WorkflowCapturePreparing: RecordingCapturePreparing, @unchec
 }
 
 @MainActor
-private final class WorkflowToastPresenter: ToastPresenting, @unchecked Sendable {
-  private(set) var messages: [ToastMessage] = []
-  private(set) var errors: [(title: String, message: String?)] = []
-
-  func show(_ toast: ToastMessage, anchor: ToastWindowController.Anchor) {
-    messages.append(toast)
-    if toast.type == .error {
-      errors.append((toast.title, toast.message))
+private final class WorkflowToastPresenter: RecordingFeedbackPresenting, @unchecked Sendable {
+  private(set) var feedback: [RecordingFeedback] = []
+  var errors: [(title: String, message: String?)] {
+    feedback.compactMap { presentedFeedback in
+      switch presentedFeedback.event {
+      case .modelReadinessBlocked(let failure):
+        return (failure.title, failure.message)
+      case .noInputDevice:
+        return ("Recording Failed", "No audio input device available")
+      case .recordingStartFailed(let message):
+        return ("Recording Failed", message)
+      default:
+        return nil
+      }
     }
   }
 
-  func showError(title: String, message: String?) {
-    errors.append((title, message))
+  func present(_ feedback: RecordingFeedback) {
+    self.feedback.append(feedback)
   }
+
+  func clearOverlayStatus() {}
 }

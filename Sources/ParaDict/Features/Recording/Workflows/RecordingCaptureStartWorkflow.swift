@@ -33,7 +33,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
   private let sessionRuntime: RecordingSessionRuntime
   private let modelReadiness: RecordingModelReadinessChecking
   private let capturePreparationWorkflow: RecordingCapturePreparing
-  private let toast: ToastPresenting
+  private let feedbackPresenter: RecordingFeedbackPresenting
   private let callbacks: Callbacks
 
   init(
@@ -42,7 +42,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     sessionRuntime: RecordingSessionRuntime,
     modelReadiness: RecordingModelReadinessChecking,
     capturePreparationWorkflow: RecordingCapturePreparing,
-    toast: ToastPresenting,
+    feedbackPresenter: RecordingFeedbackPresenting,
     callbacks: Callbacks
   ) {
     self.recorder = recorder
@@ -50,7 +50,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     self.sessionRuntime = sessionRuntime
     self.modelReadiness = modelReadiness
     self.capturePreparationWorkflow = capturePreparationWorkflow
-    self.toast = toast
+    self.feedbackPresenter = feedbackPresenter
     self.callbacks = callbacks
   }
 
@@ -72,11 +72,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     guard sessionRuntime.beginStarting() else { return false }
     if let failure = modelReadiness.recordingStartFailure() {
       sessionRuntime.markStartFailed()
-      toast.showError(
-        title: failure.title,
-        message: failure.message,
-        anchor: .cursor()
-      )
+      feedbackPresenter.present(.init(.modelReadinessBlocked(failure)))
       return false
     }
     return true
@@ -90,7 +86,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     let preparation = capturePreparationWorkflow.preparePendingSession(recordingId: recordingId)
 
     guard case .ready(let preparedSession) = preparation else {
-      toast.showError(title: "Recording Failed", message: "No audio input device available")
+      feedbackPresenter.present(.init(.noInputDevice))
       recorder.reset()
       sessionRuntime.clearActiveCapture()
       sessionRuntime.markStartFailed()
@@ -98,12 +94,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     }
 
     if preparedSession.didFallbackToSystemDefault {
-      toast.show(
-        ToastMessage(
-          type: .warning,
-          title: "Mic Unavailable",
-          message: "Selected mic not found, using system default"
-        ))
+      feedbackPresenter.present(.init(.microphoneFallbackToSystemDefault))
     }
 
     callbacks.onPreviewUpdate(.reset)
@@ -127,7 +118,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
       callbacks.onRecordingStarted()
       return true
     } catch {
-      toast.showError(title: "Recording Failed", message: error.localizedDescription)
+      feedbackPresenter.present(.init(.recordingStartFailed(error.localizedDescription)))
       recorder.reset()
       sessionRuntime.clearActiveCapture()
       sessionRuntime.markStartFailed()

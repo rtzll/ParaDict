@@ -6,7 +6,7 @@ final class RecordingSessionFlowController: Sendable {
     let stopDurationChecks: @MainActor () -> Void
     let clearRecordingPresentation: @MainActor () -> Void
     let onRecordingEnded: @MainActor () -> Void
-    let showOverlayStatus: @MainActor (OverlayStatus, TimeInterval) -> Void
+    let presentFeedback: @MainActor (RecordingFeedback) -> Void
     let onCancelComplete: @MainActor (URL?) -> Void
     let transcribe: @MainActor (CompletedRecordingCapture) async -> Void
   }
@@ -68,14 +68,7 @@ final class RecordingSessionFlowController: Sendable {
     sessionRuntime.clearPendingCancelShortcut()
     callbacks.clearRecordingPresentation()
     Task { await session?.cancel() }
-    callbacks.showOverlayStatus(
-      OverlayStatus(
-        kind: .error,
-        title: "Recording Failed",
-        message: message
-      ),
-      2.2
-    )
+    callbacks.presentFeedback(.init(.recordingInterrupted(message)))
     recorder.reset()
   }
 

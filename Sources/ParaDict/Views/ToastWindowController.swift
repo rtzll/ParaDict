@@ -23,7 +23,7 @@ extension ToastPresenting {
 
 @MainActor
 final class ToastWindowController: Sendable, ToastPresenting {
-  enum Anchor {
+  enum Anchor: Equatable {
     case topCenter
     case cursor(offset: NSPoint = NSPoint(x: 20, y: 22))
   }
