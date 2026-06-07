@@ -72,7 +72,8 @@ final class RecordingCaptureStartWorkflow: Sendable {
       sessionRuntime.markStartFailed()
       toast.showError(
         title: "Model Not Ready",
-        message: "Please wait for Parakeet to finish loading."
+        message: "Please wait for Parakeet to finish loading.",
+        anchor: .cursor()
       )
       return false
     }

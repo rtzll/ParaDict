@@ -11,6 +11,14 @@ extension ToastPresenting {
   func show(_ toast: ToastMessage) {
     show(toast, anchor: .topCenter)
   }
+
+  func showError(
+    title: String,
+    message: String? = nil,
+    anchor: ToastWindowController.Anchor = .topCenter
+  ) {
+    show(ToastMessage(type: .error, title: title, message: message), anchor: anchor)
+  }
 }
 
 @MainActor
