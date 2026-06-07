@@ -13,10 +13,14 @@ struct RecordingCaptureStartWorkflowTests {
       recorder: recorder,
       mediaPlayback: MediaPlaybackController(),
       sessionRuntime: sessionRuntime,
+      modelReadiness: WorkflowModelReadiness(
+        startFailure: ModelReadinessFailure(
+          title: "Model Loading",
+          message: "Please wait for Parakeet to finish loading."
+        )),
       capturePreparationWorkflow: WorkflowCapturePreparing(),
       toast: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        isModelLoaded: { false },
         clearOverlayStatus: {},
         startDurationChecks: {},
         onPreviewUpdate: { _ in },
@@ -30,7 +34,7 @@ struct RecordingCaptureStartWorkflowTests {
     #expect(recorder.startCalls == 0)
     #expect(sessionRuntime.recordingState == .idle)
     #expect(toast.errors.count == 1)
-    #expect(toast.errors[0].title == "Model Not Ready")
+    #expect(toast.errors[0].title == "Model Loading")
   }
 
   @Test func noInputDeviceShowsErrorAndResetsState() async {
@@ -43,10 +47,10 @@ struct RecordingCaptureStartWorkflowTests {
       recorder: recorder,
       mediaPlayback: MediaPlaybackController(),
       sessionRuntime: sessionRuntime,
+      modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
       toast: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        isModelLoaded: { true },
         clearOverlayStatus: {},
         startDurationChecks: {},
         onPreviewUpdate: { _ in },
@@ -95,10 +99,10 @@ struct RecordingCaptureStartWorkflowTests {
       recorder: recorder,
       mediaPlayback: MediaPlaybackController(),
       sessionRuntime: sessionRuntime,
+      modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
       toast: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        isModelLoaded: { true },
         clearOverlayStatus: {},
         startDurationChecks: {},
         onPreviewUpdate: { update in
@@ -145,6 +149,30 @@ private final class WorkflowStartingRecorder: RecordingCaptureStarting, @uncheck
 }
 
 @MainActor
+private final class WorkflowModelReadiness: RecordingModelReadinessChecking, @unchecked Sendable {
+  var startFailure: ModelReadinessFailure?
+
+  init(startFailure: ModelReadinessFailure? = nil) {
+    self.startFailure = startFailure
+  }
+
+  var isReadyForRecording: Bool { startFailure == nil }
+  var menuPresentation: ModelReadinessMenuPresentation {
+    ModelReadinessMenuPresentation(
+      title: isReadyForRecording ? "Ready" : "Loading Parakeet...",
+      systemImage: "waveform",
+      tone: isReadyForRecording ? .ready : .pending,
+      showsProgress: !isReadyForRecording,
+      retryTitle: nil
+    )
+  }
+
+  func preload() {}
+  func retry() {}
+  func recordingStartFailure() -> ModelReadinessFailure? { startFailure }
+}
+
+@MainActor
 private final class WorkflowCapturePreparing: RecordingCapturePreparing, @unchecked Sendable {
   var prepareOutcome: RecordingSessionPreparationOutcome = .noInputDevice
   var previewResult: Result<Void, Error> = .success(())
@@ -169,6 +197,9 @@ private final class WorkflowToastPresenter: ToastPresenting, @unchecked Sendable
 
   func show(_ toast: ToastMessage, anchor: ToastWindowController.Anchor) {
     messages.append(toast)
+    if toast.type == .error {
+      errors.append((toast.title, toast.message))
+    }
   }
 
   func showError(title: String, message: String?) {

@@ -21,7 +21,6 @@ protocol RecordingCapturePreparing: AnyObject {
 @MainActor
 final class RecordingCaptureStartWorkflow: Sendable {
   struct Callbacks: Sendable {
-    let isModelLoaded: @MainActor () -> Bool
     let clearOverlayStatus: @MainActor () -> Void
     let startDurationChecks: @MainActor () -> Void
     let onPreviewUpdate: @MainActor (StreamingPreviewUpdate) -> Void
@@ -32,6 +31,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
   private let recorder: RecordingCaptureStarting
   private let mediaPlayback: MediaPlaybackController
   private let sessionRuntime: RecordingSessionRuntime
+  private let modelReadiness: RecordingModelReadinessChecking
   private let capturePreparationWorkflow: RecordingCapturePreparing
   private let toast: ToastPresenting
   private let callbacks: Callbacks
@@ -40,6 +40,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     recorder: RecordingCaptureStarting,
     mediaPlayback: MediaPlaybackController,
     sessionRuntime: RecordingSessionRuntime,
+    modelReadiness: RecordingModelReadinessChecking,
     capturePreparationWorkflow: RecordingCapturePreparing,
     toast: ToastPresenting,
     callbacks: Callbacks
@@ -47,6 +48,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     self.recorder = recorder
     self.mediaPlayback = mediaPlayback
     self.sessionRuntime = sessionRuntime
+    self.modelReadiness = modelReadiness
     self.capturePreparationWorkflow = capturePreparationWorkflow
     self.toast = toast
     self.callbacks = callbacks
@@ -68,11 +70,11 @@ final class RecordingCaptureStartWorkflow: Sendable {
 
   private func canStartRecording() -> Bool {
     guard sessionRuntime.beginStarting() else { return false }
-    guard callbacks.isModelLoaded() else {
+    if let failure = modelReadiness.recordingStartFailure() {
       sessionRuntime.markStartFailed()
       toast.showError(
-        title: "Model Not Ready",
-        message: "Please wait for Parakeet to finish loading.",
+        title: failure.title,
+        message: failure.message,
         anchor: .cursor()
       )
       return false

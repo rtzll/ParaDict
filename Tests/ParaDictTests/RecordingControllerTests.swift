@@ -361,6 +361,9 @@ private final class FakeToastPresenter: ToastPresenting, @unchecked Sendable {
 
   func show(_ toast: ToastMessage, anchor: ToastWindowController.Anchor) {
     messages.append(PresentedMessage(toast: toast, anchor: anchor))
+    if toast.type == .error {
+      errors.append((toast.title, toast.message))
+    }
   }
 
   func showError(title: String, message: String?) {

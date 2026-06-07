@@ -11,6 +11,7 @@ final class ParakeetProvider {
   var isInitialized: Bool { asrManager != nil }
 
   func unload() {
+    initializationTask?.cancel()
     asrManager = nil
     loadedModels = nil
     initializationTask = nil

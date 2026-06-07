@@ -12,12 +12,11 @@ final class RecordingController: Sendable {
   let toast: ToastPresenting
   private let mediaPlayback: MediaPlaybackController
   private let transcriptionProvider: TranscriptionProviding
+  private let modelReadiness: RecordingModelReadinessChecking
   private let recordingPersistence: RecordingPersisting
   private let analyticsRecording: AnalyticsRecording
   private let pasteboardWriter: PasteboardWriting
   private let sessionRuntime: RecordingSessionRuntime
-  private(set) var isModelLoaded: Bool
-  private(set) var isModelLoading = false
   @ObservationIgnored
   private var streamingTranscriptAccumulator = StreamingTranscriptAccumulator()
   var partialTranscript = ""
@@ -68,6 +67,7 @@ final class RecordingController: Sendable {
     sessionRuntime: RecordingSessionRuntime = RecordingSessionRuntime(),
     toast: ToastPresenting = ToastWindowController.shared,
     transcriptionProvider: TranscriptionProviding,
+    modelReadiness: RecordingModelReadinessChecking? = nil,
     recordingPersistence: RecordingPersisting,
     analyticsRecording: AnalyticsRecording,
     pasteboardWriter: PasteboardWriting
@@ -78,10 +78,11 @@ final class RecordingController: Sendable {
     self.sessionRuntime = sessionRuntime
     self.toast = toast
     self.transcriptionProvider = transcriptionProvider
+    self.modelReadiness =
+      modelReadiness ?? TranscriptionModelReadiness(provider: transcriptionProvider)
     self.recordingPersistence = recordingPersistence
     self.analyticsRecording = analyticsRecording
     self.pasteboardWriter = pasteboardWriter
-    self.isModelLoaded = transcriptionProvider.isInitialized
     recorder.onRecordingInterrupted = { [weak self] message in
       self?.handleRecordingInterrupted(message: message)
     }
@@ -102,10 +103,10 @@ final class RecordingController: Sendable {
       recorder: recorder,
       mediaPlayback: mediaPlayback,
       sessionRuntime: sessionRuntime,
+      modelReadiness: self.modelReadiness,
       capturePreparationWorkflow: capturePreparationWorkflow,
       toast: toast,
       callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        isModelLoaded: { [weak self] in self?.isModelLoaded == true },
         clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() },
         startDurationChecks: { [weak self] in self?.startDurationChecks() },
         onPreviewUpdate: { [weak self] update in self?.applyStreamingPreviewUpdate(update) },
@@ -164,25 +165,18 @@ final class RecordingController: Sendable {
     )
   }
 
-  func preloadModel() {
-    guard !isModelLoaded, !isModelLoading else { return }
-    isModelLoading = true
+  var isModelLoaded: Bool { modelReadiness.isReadyForRecording }
+  var isModelLoading: Bool { modelReadiness.menuPresentation.showsProgress }
+  var modelReadinessPresentation: ModelReadinessMenuPresentation {
+    modelReadiness.menuPresentation
+  }
 
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      defer { self.isModelLoading = false }
-      do {
-        try await transcriptionProvider.initialize()
-        isModelLoaded = true
-      } catch {
-        isModelLoaded = false
-        toast.showError(
-          title: "Model Load Failed",
-          message: error.localizedDescription,
-          anchor: .cursor()
-        )
-      }
-    }
+  func preloadModel() {
+    modelReadiness.preload()
+  }
+
+  func retryModelLoading() {
+    modelReadiness.retry()
   }
 
   func toggleRecording() {

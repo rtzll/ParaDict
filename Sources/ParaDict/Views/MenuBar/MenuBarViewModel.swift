@@ -43,6 +43,9 @@ final class MenuBarViewModel: Sendable {
   var currentDuration: TimeInterval { recordingController.recorder.currentDuration }
   var isModelLoaded: Bool { recordingController.isModelLoaded }
   var isModelLoading: Bool { recordingController.isModelLoading }
+  var modelReadinessPresentation: ModelReadinessMenuPresentation {
+    recordingController.modelReadinessPresentation
+  }
   var allPermissionsGranted: Bool { permissions.allGranted }
   var accessibilityGranted: Bool { permissions.accessibilityGranted }
   var microphoneGranted: Bool { permissions.microphoneGranted }
@@ -72,6 +75,10 @@ final class MenuBarViewModel: Sendable {
   func updateToggleRecordingShortcut(_ shortcut: CustomShortcut?) {
     CustomShortcutStorage.set(shortcut, for: .toggleRecording)
     recordingController.reloadShortcuts()
+  }
+
+  func retryModelLoading() {
+    recordingController.retryModelLoading()
   }
 
   func requestMicrophone() async {
