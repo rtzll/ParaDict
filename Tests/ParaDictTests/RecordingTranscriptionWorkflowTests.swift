@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct RecordingTranscriptionWorkflowTests {
   @Test func successfulTranscriptionCopiesPersistsAndTracksAnalytics() async throws {
-    let provider = WorkflowTranscriptionProvider()
+    let provider = TestTranscriptionProvider()
     provider.result = TranscriptionResult(
       text: "hello world",
       segments: [],
@@ -15,9 +15,9 @@ struct RecordingTranscriptionWorkflowTests {
       duration: 0.4,
       model: "test"
     )
-    let recordings = WorkflowRecordingPersistence()
-    let analytics = WorkflowAnalyticsRecorder()
-    let pasteboard = WorkflowPasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
       recordingPersistence: recordings,
@@ -41,7 +41,7 @@ struct RecordingTranscriptionWorkflowTests {
   }
 
   @Test func emptyTranscriptionReturnsEmptyWithoutSideEffects() async throws {
-    let provider = WorkflowTranscriptionProvider()
+    let provider = TestTranscriptionProvider()
     provider.result = TranscriptionResult(
       text: "",
       segments: [],
@@ -49,9 +49,9 @@ struct RecordingTranscriptionWorkflowTests {
       duration: 0.1,
       model: "test"
     )
-    let recordings = WorkflowRecordingPersistence()
-    let analytics = WorkflowAnalyticsRecorder()
-    let pasteboard = WorkflowPasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
       recordingPersistence: recordings,
@@ -74,15 +74,15 @@ struct RecordingTranscriptionWorkflowTests {
   }
 
   @Test func failedTranscriptionPersistsFailedRecording() async throws {
-    let provider = WorkflowTranscriptionProvider()
+    let provider = TestTranscriptionProvider()
     provider.error = NSError(
       domain: "RecordingTranscriptionWorkflowTests",
       code: 7,
       userInfo: [NSLocalizedDescriptionKey: "transcriber exploded"]
     )
-    let recordings = WorkflowRecordingPersistence()
-    let analytics = WorkflowAnalyticsRecorder()
-    let pasteboard = WorkflowPasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
       recordingPersistence: recordings,
@@ -106,7 +106,7 @@ struct RecordingTranscriptionWorkflowTests {
   }
 
   @Test func persistenceFailureDowngradesToFailedRecording() async throws {
-    let provider = WorkflowTranscriptionProvider()
+    let provider = TestTranscriptionProvider()
     provider.result = TranscriptionResult(
       text: "hello world",
       segments: [],
@@ -114,14 +114,14 @@ struct RecordingTranscriptionWorkflowTests {
       duration: 0.4,
       model: "test"
     )
-    let recordings = WorkflowRecordingPersistence()
+    let recordings = TestRecordingPersistence()
     recordings.completedSaveError = NSError(
       domain: "RecordingTranscriptionWorkflowTests",
       code: 9,
       userInfo: [NSLocalizedDescriptionKey: "save failed"]
     )
-    let analytics = WorkflowAnalyticsRecorder()
-    let pasteboard = WorkflowPasteboardWriter()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
       recordingPersistence: recordings,
@@ -159,71 +159,5 @@ struct RecordingTranscriptionWorkflowTests {
       sampleRate: 16_000,
       inputDeviceName: "Test Mic"
     )
-  }
-}
-
-@MainActor
-private final class WorkflowTranscriptionProvider: TranscriptionProviding, @unchecked Sendable {
-  var isInitialized = true
-  var result = TranscriptionResult(
-    text: "",
-    segments: [],
-    language: "en",
-    duration: 0,
-    model: "fake"
-  )
-  var error: Error?
-
-  func initialize() async throws {}
-
-  func models() async throws -> AsrModels {
-    fatalError("Unused in RecordingTranscriptionWorkflowTests")
-  }
-
-  func transcribe(audioURL: URL) async throws -> TranscriptionResult {
-    if let error {
-      throw error
-    }
-    return result
-  }
-}
-
-@MainActor
-private final class WorkflowRecordingPersistence: RecordingPersisting, @unchecked Sendable {
-  var completedSaveError: Error?
-  private(set) var completedRecordings: [Recording] = []
-  private(set) var failedRecordings: [Recording] = []
-
-  func saveWithExistingAudio(_ recording: Recording) async throws {
-    if let completedSaveError {
-      throw completedSaveError
-    }
-    completedRecordings.append(recording)
-  }
-
-  func saveFailedRecording(_ recording: Recording) async throws {
-    failedRecordings.append(recording)
-  }
-}
-
-@MainActor
-private final class WorkflowAnalyticsRecorder: AnalyticsRecording, @unchecked Sendable {
-  struct Call {
-    let duration: TimeInterval
-    let wordCount: Int
-  }
-
-  private(set) var calls: [Call] = []
-
-  func record(duration: TimeInterval, wordCount: Int) async {
-    calls.append(Call(duration: duration, wordCount: wordCount))
-  }
-}
-
-private final class WorkflowPasteboardWriter: PasteboardWriting, @unchecked Sendable {
-  private(set) var copiedTexts: [String] = []
-
-  func copyAndPaste(_ text: String) {
-    copiedTexts.append(text)
   }
 }

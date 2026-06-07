@@ -7,16 +7,16 @@ import Testing
 @MainActor
 struct RecordingControllerTests {
   @Test func usesInjectedConcreteDependencies() {
-    let transcription = FakeTranscriptionProvider()
+    let transcription = TestTranscriptionProvider()
     let recorder = AudioRecorder()
     let deviceManager = AudioDeviceManager()
     let controller = RecordingController(
       recorder: recorder,
       deviceManager: deviceManager,
       transcriptionProvider: transcription,
-      recordingPersistence: FakeRecordingPersistence(),
-      analyticsRecording: FakeAnalyticsRecorder(),
-      pasteboardWriter: FakePasteboardWriter()
+      recordingPersistence: TestRecordingPersistence(),
+      analyticsRecording: TestAnalyticsRecorder(),
+      pasteboardWriter: TestPasteboardWriter()
     )
 
     #expect(controller.recorder === recorder)
@@ -24,8 +24,8 @@ struct RecordingControllerTests {
   }
 
   @Test func startRecordingWhenModelIsNotReadyShowsError() async {
-    let toast = FakeToastPresenter()
-    let transcription = FakeTranscriptionProvider()
+    let toast = TestToastPresenter()
+    let transcription = TestTranscriptionProvider()
     transcription.isInitialized = false
     let controller = makeController(toast: toast, transcriptionProvider: transcription)
 
@@ -39,7 +39,7 @@ struct RecordingControllerTests {
   }
 
   @Test func stopAndTranscribeShortRecordingCancelsAndResetsState() async {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     var endedCount = 0
     controller.onRecordingEnded = { endedCount += 1 }
@@ -62,7 +62,7 @@ struct RecordingControllerTests {
   }
 
   @Test func cancelRecordingShowsCancellationStatusAndClearsPartialTranscript() async {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     var endedCount = 0
     controller.onRecordingEnded = { endedCount += 1 }
@@ -84,7 +84,7 @@ struct RecordingControllerTests {
   }
 
   @Test func recordingInterruptionResetsStateAndShowsErrorToast() async {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     var endedCount = 0
     controller.onRecordingEnded = { endedCount += 1 }
@@ -109,7 +109,7 @@ struct RecordingControllerTests {
   }
 
   @Test func streamingPreviewStartupFailureShowsExplicitFeedback() {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     controller.recorder.state = .recording
     controller.setRecordingSessionStateForTesting(.recording)
@@ -130,7 +130,7 @@ struct RecordingControllerTests {
   }
 
   @Test func cancelRecordingShortcutShowsAttachedOverlayHintInsteadOfToast() {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     controller.recorder.state = .recording
     controller.setRecordingSessionStateForTesting(.recording)
@@ -142,7 +142,7 @@ struct RecordingControllerTests {
   }
 
   @Test func cancelRecordingShortcutUsesSessionStateAsSourceOfTruth() {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     controller.recorder.state = .idle
     controller.setRecordingSessionStateForTesting(.recording)
@@ -154,7 +154,7 @@ struct RecordingControllerTests {
   }
 
   @Test func cancelRecordingShortcutSecondPressCancelsRecording() async {
-    let toast = FakeToastPresenter()
+    let toast = TestToastPresenter()
     let controller = makeController(toast: toast)
     controller.recorder.state = .recording
     controller.setRecordingSessionStateForTesting(.recording)
@@ -171,8 +171,8 @@ struct RecordingControllerTests {
   }
 
   @Test func transcribeSuccessfulResultCopiesTextSavesRecordingAndTracksAnalytics() async throws {
-    let toast = FakeToastPresenter()
-    let transcription = FakeTranscriptionProvider()
+    let toast = TestToastPresenter()
+    let transcription = TestTranscriptionProvider()
     transcription.result = TranscriptionResult(
       text: "hello world",
       segments: [
@@ -182,9 +182,9 @@ struct RecordingControllerTests {
       duration: 0.4,
       model: "parakeet-test"
     )
-    let recordings = FakeRecordingPersistence()
-    let analytics = FakeAnalyticsRecorder()
-    let pasteboard = FakePasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
@@ -224,8 +224,8 @@ struct RecordingControllerTests {
   }
 
   @Test func transcribeEmptyResultClearsStateAndShowsErrorWithoutPersisting() async throws {
-    let toast = FakeToastPresenter()
-    let transcription = FakeTranscriptionProvider()
+    let toast = TestToastPresenter()
+    let transcription = TestTranscriptionProvider()
     transcription.result = TranscriptionResult(
       text: "",
       segments: [],
@@ -233,9 +233,9 @@ struct RecordingControllerTests {
       duration: 0.2,
       model: "parakeet-test"
     )
-    let recordings = FakeRecordingPersistence()
-    let analytics = FakeAnalyticsRecorder()
-    let pasteboard = FakePasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
@@ -272,16 +272,16 @@ struct RecordingControllerTests {
   }
 
   @Test func transcribeFailureShowsErrorAndSavesFailedRecording() async throws {
-    let toast = FakeToastPresenter()
-    let transcription = FakeTranscriptionProvider()
+    let toast = TestToastPresenter()
+    let transcription = TestTranscriptionProvider()
     transcription.error = NSError(
       domain: "RecordingControllerTests",
       code: 7,
       userInfo: [NSLocalizedDescriptionKey: "transcriber exploded"]
     )
-    let recordings = FakeRecordingPersistence()
-    let analytics = FakeAnalyticsRecorder()
-    let pasteboard = FakePasteboardWriter()
+    let recordings = TestRecordingPersistence()
+    let analytics = TestAnalyticsRecorder()
+    let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
@@ -327,15 +327,15 @@ struct RecordingControllerTests {
   }
 
   private func makeController(
-    toast: FakeToastPresenter = FakeToastPresenter(),
-    transcriptionProvider: FakeTranscriptionProvider = FakeTranscriptionProvider()
+    toast: TestToastPresenter = TestToastPresenter(),
+    transcriptionProvider: TestTranscriptionProvider = TestTranscriptionProvider()
   ) -> RecordingController {
     RecordingController(
       toast: toast,
       transcriptionProvider: transcriptionProvider,
-      recordingPersistence: FakeRecordingPersistence(),
-      analyticsRecording: FakeAnalyticsRecorder(),
-      pasteboardWriter: FakePasteboardWriter()
+      recordingPersistence: TestRecordingPersistence(),
+      analyticsRecording: TestAnalyticsRecorder(),
+      pasteboardWriter: TestPasteboardWriter()
     )
   }
 
@@ -346,89 +346,5 @@ struct RecordingControllerTests {
     let url = directory.appendingPathComponent(name)
     try Data(repeating: 0xAB, count: size).write(to: url)
     return url
-  }
-}
-
-@MainActor
-private final class FakeToastPresenter: ToastPresenting, @unchecked Sendable {
-  struct PresentedMessage {
-    let toast: ToastMessage
-    let anchor: ToastWindowController.Anchor
-  }
-
-  private(set) var messages: [PresentedMessage] = []
-  private(set) var errors: [(title: String, message: String?)] = []
-
-  func show(_ toast: ToastMessage, anchor: ToastWindowController.Anchor) {
-    messages.append(PresentedMessage(toast: toast, anchor: anchor))
-    if toast.type == .error {
-      errors.append((toast.title, toast.message))
-    }
-  }
-
-  func showError(title: String, message: String?) {
-    errors.append((title, message))
-  }
-}
-
-@MainActor
-private final class FakeTranscriptionProvider: TranscriptionProviding, @unchecked Sendable {
-  var isInitialized: Bool = true
-  var result = TranscriptionResult(
-    text: "",
-    segments: [],
-    language: "en",
-    duration: 0,
-    model: "fake"
-  )
-  var error: Error?
-
-  func initialize() async throws {}
-
-  func models() async throws -> AsrModels {
-    fatalError("Unused in RecordingControllerTests")
-  }
-
-  func transcribe(audioURL: URL) async throws -> TranscriptionResult {
-    if let error {
-      throw error
-    }
-    return result
-  }
-}
-
-@MainActor
-private final class FakeRecordingPersistence: RecordingPersisting, @unchecked Sendable {
-  private(set) var completedRecordings: [Recording] = []
-  private(set) var failedRecordings: [Recording] = []
-
-  func saveWithExistingAudio(_ recording: Recording) async throws {
-    completedRecordings.append(recording)
-  }
-
-  func saveFailedRecording(_ recording: Recording) async throws {
-    failedRecordings.append(recording)
-  }
-}
-
-@MainActor
-private final class FakeAnalyticsRecorder: AnalyticsRecording, @unchecked Sendable {
-  struct Call {
-    let duration: TimeInterval
-    let wordCount: Int
-  }
-
-  private(set) var calls: [Call] = []
-
-  func record(duration: TimeInterval, wordCount: Int) async {
-    calls.append(Call(duration: duration, wordCount: wordCount))
-  }
-}
-
-private final class FakePasteboardWriter: PasteboardWriting, @unchecked Sendable {
-  private(set) var copiedTexts: [String] = []
-
-  func copyAndPaste(_ text: String) {
-    copiedTexts.append(text)
   }
 }
