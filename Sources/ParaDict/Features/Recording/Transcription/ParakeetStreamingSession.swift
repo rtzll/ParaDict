@@ -24,48 +24,17 @@ private final class StreamingChunkSource: @unchecked Sendable {
   }
 }
 
-struct StreamingTranscriptionWindow: Equatable, Sendable {
-  let samples: [Float]
-  let timeOffset: Double
-
-  static func make(
-    audioBuffer: [Float],
-    trimmedSampleCount: Int,
-    bufferRelativeSeek: Int,
-    inputSampleRate: Double,
-    trailingSilenceSeconds: Double,
-    maxSinglePassSeconds: Double = 15.0
-  ) -> StreamingTranscriptionWindow? {
-    guard bufferRelativeSeek < audioBuffer.count else { return nil }
-
-    var samples = Array(audioBuffer[bufferRelativeSeek...])
-    guard samples.count >= Int(inputSampleRate) else { return nil }
-
-    let maxSinglePassSamples = Int(inputSampleRate * maxSinglePassSeconds)
-    let trailingSilenceSamples = Int(inputSampleRate * trailingSilenceSeconds)
-    if trailingSilenceSamples > 0, samples.count + trailingSilenceSamples <= maxSinglePassSamples {
-      samples += [Float](repeating: 0, count: trailingSilenceSamples)
-    }
-
-    return StreamingTranscriptionWindow(
-      samples: samples,
-      timeOffset: Double(trimmedSampleCount + bufferRelativeSeek) / inputSampleRate
-    )
-  }
-}
-
 actor ParakeetStreamingSession {
   private let chunkSource = StreamingChunkSource()
   private let agreementConfig = StreamingAgreementConfig()
+  private let wordConverter = StreamingTokenWordConverter()
   private var agreementEngine: StreamingAgreementEngine
 
   private var manager: AsrManager?
   private var inputSampleRate: Double = 16_000
   private var chunkPumpTask: Task<Void, Never>?
   private var transcriptionLoopTask: Task<Void, Never>?
-  private var audioBuffer: [Float] = []
-  private var trimmedSampleCount = 0
-  private var lastProcessedSampleCount = 0
+  private var audioBuffer = StreamingAudioBuffer()
   private var isTranscribing = false
   private var onPreviewUpdate: (@MainActor (StreamingPreviewUpdate) -> Void)?
 
@@ -88,9 +57,7 @@ actor ParakeetStreamingSession {
     self.manager = manager
     self.inputSampleRate = inputSampleRate
     self.onPreviewUpdate = onPreviewUpdate
-    self.audioBuffer = []
-    self.trimmedSampleCount = 0
-    self.lastProcessedSampleCount = 0
+    self.audioBuffer.reset()
     self.isTranscribing = false
     agreementEngine.reset()
 
@@ -114,9 +81,7 @@ actor ParakeetStreamingSession {
     transcriptionLoopTask?.cancel()
     chunkPumpTask = nil
     transcriptionLoopTask = nil
-    audioBuffer = []
-    trimmedSampleCount = 0
-    lastProcessedSampleCount = 0
+    audioBuffer.reset()
     isTranscribing = false
     onPreviewUpdate = nil
     agreementEngine.reset()
@@ -124,23 +89,17 @@ actor ParakeetStreamingSession {
   }
 
   private func append(chunk: Data) {
-    let sampleCount = chunk.count / MemoryLayout<Float>.size
-    guard sampleCount > 0 else { return }
-
-    chunk.withUnsafeBytes { rawBuffer in
-      let floats = rawBuffer.bindMemory(to: Float.self)
-      audioBuffer.append(contentsOf: floats)
-    }
+    audioBuffer.append(chunk: chunk)
   }
 
   private func runTranscriptionPass() async {
     guard !isTranscribing else { return }
     guard let manager else { return }
 
-    let absoluteSampleCount = trimmedSampleCount + audioBuffer.count
-    let minNewSamples = Int(inputSampleRate * 0.5)
-    guard absoluteSampleCount - lastProcessedSampleCount >= minNewSamples else { return }
-    guard absoluteSampleCount >= Int(inputSampleRate) else { return }
+    let absoluteSampleCount = audioBuffer.absoluteSampleCount
+    guard
+      audioBuffer.hasEnoughAudioToProcess(inputSampleRate: inputSampleRate, minNewAudioSeconds: 0.5)
+    else { return }
 
     isTranscribing = true
     defer { isTranscribing = false }
@@ -148,15 +107,9 @@ actor ParakeetStreamingSession {
     let seekTime =
       agreementEngine.hypothesisStartTime > 0
       ? agreementEngine.hypothesisStartTime : agreementEngine.confirmedEndTime
-    let seekSample = max(0, Int(seekTime * inputSampleRate))
-    let bufferRelativeSeek = max(0, seekSample - trimmedSampleCount)
-    guard bufferRelativeSeek < audioBuffer.count else { return }
-
     guard
-      let window = StreamingTranscriptionWindow.make(
-        audioBuffer: audioBuffer,
-        trimmedSampleCount: trimmedSampleCount,
-        bufferRelativeSeek: bufferRelativeSeek,
+      let window = audioBuffer.transcriptionWindow(
+        startingAt: seekTime,
         inputSampleRate: inputSampleRate,
         trailingSilenceSeconds: agreementConfig.trailingSilenceSeconds
       )
@@ -170,7 +123,7 @@ actor ParakeetStreamingSession {
 
     do {
       let result = try await manager.transcribe(buffer, source: .microphone)
-      lastProcessedSampleCount = absoluteSampleCount
+      audioBuffer.markProcessed(upTo: absoluteSampleCount)
 
       guard let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty else {
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -180,7 +133,7 @@ actor ParakeetStreamingSession {
         return
       }
 
-      let words = Self.mergeTokensToWords(tokenTimings, timeOffset: window.timeOffset)
+      let words = wordConverter.words(from: tokenTimings, timeOffset: window.timeOffset)
       guard !words.isEmpty else { return }
 
       let agreementResult = agreementEngine.process(words: words, confidence: result.confidence)
@@ -192,75 +145,10 @@ actor ParakeetStreamingSession {
       }
 
       let trimSample = max(0, Int(agreementEngine.hypothesisStartTime * inputSampleRate))
-      let samplesToTrim = trimSample - trimmedSampleCount
-      if samplesToTrim > 0 {
-        let actualTrim = min(samplesToTrim, audioBuffer.count)
-        audioBuffer.removeFirst(actualTrim)
-        trimmedSampleCount += actualTrim
-      }
+      audioBuffer.trim(beforeAbsoluteSample: trimSample)
     } catch {
       // Keep recording alive; preview can recover on the next pass.
     }
-  }
-
-  private static func mergeTokensToWords(_ timings: [TokenTiming], timeOffset: Double)
-    -> [StreamingWord]
-  {
-    guard !timings.isEmpty else { return [] }
-
-    var words: [StreamingWord] = []
-    var currentText = ""
-    var startTime = 0.0
-    var endTime = 0.0
-    var confidences: [Float] = []
-
-    for timing in timings {
-      let token = timing.token
-      let startsWord = token.hasPrefix("▁") || token.hasPrefix(" ")
-
-      if startsWord {
-        if !currentText.isEmpty {
-          let confidence =
-            confidences.isEmpty ? 1.0 : confidences.reduce(0, +) / Float(confidences.count)
-          words.append(
-            StreamingWord(
-              text: currentText,
-              startTime: startTime + timeOffset,
-              endTime: endTime + timeOffset,
-              confidence: confidence
-            )
-          )
-        }
-
-        currentText = token.trimmingCharacters(in: .whitespaces).replacingOccurrences(
-          of: "▁", with: "")
-        startTime = timing.startTime
-        endTime = timing.endTime
-        confidences = [timing.confidence]
-      } else {
-        if currentText.isEmpty {
-          startTime = timing.startTime
-        }
-        currentText += token
-        endTime = timing.endTime
-        confidences.append(timing.confidence)
-      }
-    }
-
-    if !currentText.isEmpty {
-      let confidence =
-        confidences.isEmpty ? 1.0 : confidences.reduce(0, +) / Float(confidences.count)
-      words.append(
-        StreamingWord(
-          text: currentText,
-          startTime: startTime + timeOffset,
-          endTime: endTime + timeOffset,
-          confidence: confidence
-        )
-      )
-    }
-
-    return words
   }
 
   private static func makePCMBuffer(from samples: [Float], sampleRate: Double) -> AVAudioPCMBuffer?
