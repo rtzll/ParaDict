@@ -25,11 +25,18 @@ final class AppBootstrap {
   }
 
   func start() async {
-    try? await recordingStore.loadAll()
+    do {
+      try await recordingStore.loadAll()
+    } catch {
+      bootstrapLog.error(
+        "Failed to load recordings; continuing with empty in-memory history: \(error.localizedDescription)"
+      )
+    }
     await recordingStore.performRetention()
 
     let analyticsExisted = await analyticsStore.load()
     if !analyticsExisted {
+      bootstrapLog.info("Analytics store missing or unreadable; rebuilding from recordings")
       await analyticsStore.seedFromRecordings(recordingStore.recordings)
     }
 

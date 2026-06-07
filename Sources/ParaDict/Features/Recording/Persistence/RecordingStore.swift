@@ -1,14 +1,25 @@
 import Foundation
 import Observation
+import os.log
 
 actor RecordingFileStore: Sendable {
   private let fileManager = FileManager.default
+  private let logger = Logger(subsystem: Logger.subsystem, category: "RecordingStore")
 
+  /// Persistence failure policy:
+  /// - Missing recording directories on first launch are recoverable and recreated.
+  /// - Corrupt per-recording metadata is logged and skipped so one bad item does not hide history.
+  /// - Explicit saves/deletes throw so callers can downgrade or surface the operation failure.
+  /// - Retention cleanup is best-effort: failures are logged but do not block recording flow.
   init() {
-    try? fileManager.createDirectory(
-      at: Recording.baseDirectory,
-      withIntermediateDirectories: true
-    )
+    do {
+      try fileManager.createDirectory(
+        at: Recording.baseDirectory,
+        withIntermediateDirectories: true
+      )
+    } catch {
+      logger.error("Failed to create recording directory: \(error.localizedDescription)")
+    }
   }
 
   func saveWithExistingAudio(_ recording: Recording) throws {
@@ -29,16 +40,23 @@ actor RecordingFileStore: Sendable {
   }
 
   func delete(_ recording: Recording) throws {
-    try? fileManager.removeItem(at: recording.storageDirectory)
+    guard fileManager.fileExists(atPath: recording.storageDirectory.path) else { return }
+    try fileManager.removeItem(at: recording.storageDirectory)
   }
 
   func loadAll() throws -> [Recording] {
-    ensureDirectoryExists()
+    try ensureDirectoryExists()
 
     let baseDir = Recording.baseDirectory
-    let contents = (try? fileManager.contentsOfDirectory(atPath: baseDir.path)) ?? []
-    var loaded: [Recording] = []
+    let contents: [String]
+    do {
+      contents = try fileManager.contentsOfDirectory(atPath: baseDir.path)
+    } catch {
+      logger.error("Failed to list recordings directory: \(error.localizedDescription)")
+      throw error
+    }
 
+    var loaded: [Recording] = []
     for id in contents {
       let metadataURL = baseDir.appendingPathComponent(id).appendingPathComponent("metadata.json")
       do {
@@ -48,6 +66,9 @@ actor RecordingFileStore: Sendable {
         let recording = try decoder.decode(Recording.self, from: data)
         loaded.append(recording)
       } catch {
+        logger.warning(
+          "Skipping unreadable recording metadata for \(id, privacy: .public): \(error.localizedDescription)"
+        )
         continue
       }
     }
@@ -56,14 +77,26 @@ actor RecordingFileStore: Sendable {
   }
 
   func removeAudioFile(at url: URL) {
-    try? fileManager.removeItem(at: url)
+    guard fileManager.fileExists(atPath: url.path) else { return }
+    do {
+      try fileManager.removeItem(at: url)
+    } catch {
+      logger.warning(
+        "Failed to remove retained audio file at \(url.path, privacy: .public): \(error.localizedDescription)"
+      )
+    }
   }
 
-  private func ensureDirectoryExists() {
-    try? fileManager.createDirectory(
-      at: Recording.baseDirectory,
-      withIntermediateDirectories: true
-    )
+  private func ensureDirectoryExists() throws {
+    do {
+      try fileManager.createDirectory(
+        at: Recording.baseDirectory,
+        withIntermediateDirectories: true
+      )
+    } catch {
+      logger.error("Failed to create recording directory: \(error.localizedDescription)")
+      throw error
+    }
   }
 
   private func saveTranscriptionFiles(_ recording: Recording) throws {
@@ -113,6 +146,7 @@ final class RecordingStore: Sendable {
   private(set) var recordings: [Recording] = []
 
   private let fileStore: RecordingFileStore
+  private let logger = Logger(subsystem: Logger.subsystem, category: "RecordingStore")
   private let maxRecordings = 50
   private let wavRetentionInterval: TimeInterval = 15 * 60  // 15 minutes
 
@@ -165,7 +199,13 @@ final class RecordingStore: Sendable {
       let excess = Array(recordings[maxRecordings...])
       recordings = Array(recordings.prefix(maxRecordings))
       for recording in excess {
-        try? await fileStore.delete(recording)
+        do {
+          try await fileStore.delete(recording)
+        } catch {
+          logger.warning(
+            "Failed to delete recording during retention for \(recording.id, privacy: .public): \(error.localizedDescription)"
+          )
+        }
       }
     }
 

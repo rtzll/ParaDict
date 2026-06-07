@@ -7,6 +7,11 @@ actor AnalyticsFileStore: Sendable {
   private let fileManager = FileManager.default
   private let logger = Logger(subsystem: Logger.subsystem, category: "AnalyticsStore")
 
+  /// Persistence failure policy:
+  /// - Missing analytics files are silent first-launch state and can be rebuilt from recordings.
+  /// - Decode failures are logged and treated as recoverable by rebuilding aggregate totals.
+  /// - Save and directory creation failures are logged; recording completion should not fail.
+
   init(fileURL: URL) {
     self.fileURL = fileURL
   }
@@ -14,7 +19,15 @@ actor AnalyticsFileStore: Sendable {
   func load() -> AnalyticsStore.Totals? {
     ensureParentDirectoryExists()
 
-    guard let data = try? Data(contentsOf: fileURL) else {
+    guard fileManager.fileExists(atPath: fileURL.path) else {
+      return nil
+    }
+
+    let data: Data
+    do {
+      data = try Data(contentsOf: fileURL)
+    } catch {
+      logger.error("Failed to read analytics store: \(error.localizedDescription)")
       return nil
     }
 
