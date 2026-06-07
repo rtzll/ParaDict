@@ -48,7 +48,7 @@ protocol PasteboardWriting: AnyObject {
   func copyAndPaste(_ text: String)
 }
 
-struct CompletedRecordingCapture {
+struct CompletedRecordingCapture: Sendable {
   let audioURL: URL
   let recordingId: String
   let duration: TimeInterval

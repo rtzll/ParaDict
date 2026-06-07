@@ -1,14 +1,16 @@
 import Foundation
 
+enum RecordingSessionFlowEvent: Sendable {
+  case recordingStarted
+  case recordingEnded
+  case previewUpdate(StreamingPreviewUpdate)
+  case transcriptionRequested(CompletedRecordingCapture)
+}
+
 @MainActor
 final class RecordingSessionFlowController: Sendable {
   struct Callbacks: Sendable {
-    let stopDurationChecks: @MainActor () -> Void
-    let clearRecordingPresentation: @MainActor () -> Void
-    let onRecordingEnded: @MainActor () -> Void
-    let presentFeedback: @MainActor (RecordingFeedback) -> Void
-    let onCancelComplete: @MainActor (URL?) -> Void
-    let transcribe: @MainActor (CompletedRecordingCapture) async -> Void
+    let handleEvent: @MainActor (RecordingSessionFlowEvent) -> Void
   }
 
   private let recorder: AudioRecorder
@@ -16,7 +18,27 @@ final class RecordingSessionFlowController: Sendable {
   private let mediaPlayback: MediaPlaybackController
   private let captureStartWorkflow: RecordingCaptureStartWorkflow
   private let captureShutdownWorkflow: RecordingCaptureShutdownWorkflow
+  private let feedbackPresenter: RecordingFeedbackPresenting
+  private let maximumDuration: TimeInterval
+  private let warningDuration: TimeInterval
   private let callbacks: Callbacks
+
+  private lazy var durationMonitor = RecordingDurationMonitor(
+    maximumDuration: maximumDuration,
+    warningDuration: warningDuration,
+    currentDuration: { [weak self] in self?.recorder.currentDuration ?? 0 },
+    hasShownWarning: { [weak self] in self?.sessionRuntime.hasShownDurationWarning ?? false },
+    markWarningShown: { [weak self] in self?.sessionRuntime.markDurationWarningShown() },
+    onWarning: { [weak self] remainingSeconds in
+      self?.feedbackPresenter.present(
+        .init(.recordingLimitWarning(remainingSeconds: remainingSeconds)))
+    },
+    onLimitReached: { [weak self] in
+      Task { @MainActor [weak self] in
+        await self?.stopAndTranscribe()
+      }
+    }
+  )
 
   init(
     recorder: AudioRecorder,
@@ -24,6 +46,9 @@ final class RecordingSessionFlowController: Sendable {
     mediaPlayback: MediaPlaybackController,
     captureStartWorkflow: RecordingCaptureStartWorkflow,
     captureShutdownWorkflow: RecordingCaptureShutdownWorkflow,
+    feedbackPresenter: RecordingFeedbackPresenting,
+    maximumDuration: TimeInterval,
+    warningDuration: TimeInterval,
     callbacks: Callbacks
   ) {
     self.recorder = recorder
@@ -31,13 +56,21 @@ final class RecordingSessionFlowController: Sendable {
     self.mediaPlayback = mediaPlayback
     self.captureStartWorkflow = captureStartWorkflow
     self.captureShutdownWorkflow = captureShutdownWorkflow
+    self.feedbackPresenter = feedbackPresenter
+    self.maximumDuration = maximumDuration
+    self.warningDuration = warningDuration
     self.callbacks = callbacks
   }
 
   func start() async {
     await sessionRuntime.performTransition {
       guard sessionRuntime.recordingState == .idle else { return }
-      await captureStartWorkflow.startRecording()
+      let outcome = await captureStartWorkflow.startRecording { [weak self] update in
+        self?.callbacks.handleEvent(.previewUpdate(update))
+      }
+      guard case .started = outcome else { return }
+      durationMonitor.start()
+      callbacks.handleEvent(.recordingStarted)
     }
   }
 
@@ -47,28 +80,32 @@ final class RecordingSessionFlowController: Sendable {
         return
       }
 
-      await callbacks.transcribe(capture)
+      callbacks.handleEvent(.transcriptionRequested(capture))
     }
   }
 
   func cancel() async {
     await performEndedRecordingTransition {
       let audioURL = await captureShutdownWorkflow.stopCaptureForCancellation()
-      callbacks.onCancelComplete(audioURL)
+      feedbackPresenter.present(.init(.recordingCanceled))
+      if let audioURL {
+        try? FileManager.default.removeItem(at: audioURL)
+      }
     }
   }
 
   func handleInterruption(message: String) {
-    callbacks.stopDurationChecks()
-    callbacks.onRecordingEnded()
+    durationMonitor.stop()
+    callbacks.handleEvent(.recordingEnded)
     let session = sessionRuntime.takeActiveStreamingSession()
     sessionRuntime.clearActiveCapture()
     sessionRuntime.resetAfterInterruption()
     sessionRuntime.resetTransitionGate()
     sessionRuntime.clearPendingCancelShortcut()
-    callbacks.clearRecordingPresentation()
+    callbacks.handleEvent(.previewUpdate(.reset))
+    feedbackPresenter.clearOverlayStatus()
     Task { await session?.cancel() }
-    callbacks.presentFeedback(.init(.recordingInterrupted(message)))
+    feedbackPresenter.present(.init(.recordingInterrupted(message)))
     recorder.reset()
   }
 
@@ -82,10 +119,10 @@ final class RecordingSessionFlowController: Sendable {
 
   private func completeActiveRecordingSession(resumeMedia: Bool = true) {
     sessionRuntime.clearPendingCancelShortcut()
-    callbacks.stopDurationChecks()
+    durationMonitor.stop()
     if resumeMedia {
       mediaPlayback.resumeIfPaused()
     }
-    callbacks.onRecordingEnded()
+    callbacks.handleEvent(.recordingEnded)
   }
 }

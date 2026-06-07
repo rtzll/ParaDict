@@ -19,17 +19,12 @@ struct RecordingCaptureStartWorkflowTests {
           message: "Please wait for Parakeet to finish loading."
         )),
       capturePreparationWorkflow: WorkflowCapturePreparing(),
-      feedbackPresenter: toast,
-      callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        clearOverlayStatus: {},
-        startDurationChecks: {},
-        onPreviewUpdate: { _ in },
-        onPreviewStartupFailure: {},
-        onRecordingStarted: {}
-      )
+      feedbackPresenter: toast
     )
 
-    await workflow.startRecording()
+    let outcome = await workflow.startRecording { _ in }
+
+    #expect(outcome == .notStarted)
 
     #expect(recorder.startCalls == 0)
     #expect(sessionRuntime.recordingState == .idle)
@@ -49,17 +44,12 @@ struct RecordingCaptureStartWorkflowTests {
       sessionRuntime: sessionRuntime,
       modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
-      feedbackPresenter: toast,
-      callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        clearOverlayStatus: {},
-        startDurationChecks: {},
-        onPreviewUpdate: { _ in },
-        onPreviewStartupFailure: {},
-        onRecordingStarted: {}
-      )
+      feedbackPresenter: toast
     )
 
-    await workflow.startRecording()
+    let outcome = await workflow.startRecording { _ in }
+
+    #expect(outcome == .notStarted)
 
     #expect(recorder.startCalls == 0)
     #expect(recorder.resetCalls == 1)
@@ -67,6 +57,54 @@ struct RecordingCaptureStartWorkflowTests {
     #expect(sessionRuntime.currentRecordingId == nil)
     #expect(toast.errors.count == 1)
     #expect(toast.errors[0].title == "Recording Failed")
+  }
+
+  @Test func previewStartupFailureKeepsRecordingAndReportsFeedback() async {
+    let recorder = WorkflowStartingRecorder()
+    let toast = WorkflowToastPresenter()
+    let sessionRuntime = RecordingSessionRuntime()
+    let preparation = WorkflowCapturePreparing()
+    preparation.prepareOutcome = .ready(
+      RecordingSessionPreparation(
+        session: PendingRecordingSession(
+          recordingId: "recording-preview-failure",
+          resolvedDevice: ResolvedRecordingDevice(
+            deviceID: 42,
+            resolvedDeviceName: "Mic",
+            didFallbackToSystemDefault: false,
+            requestedMode: .systemDefault
+          ),
+          audioURL: URL(fileURLWithPath: "/tmp/recording-preview-failure.wav"),
+          streamingSession: ParakeetStreamingSession()
+        ),
+        didFallbackToSystemDefault: false
+      ))
+    preparation.previewResult = .failure(
+      NSError(
+        domain: "RecordingCaptureStartWorkflowTests",
+        code: 8,
+        userInfo: [NSLocalizedDescriptionKey: "preview failed"]
+      ))
+    var previewUpdates: [StreamingPreviewUpdate] = []
+    let workflow = RecordingCaptureStartWorkflow(
+      recorder: recorder,
+      mediaPlayback: MediaPlaybackController(),
+      sessionRuntime: sessionRuntime,
+      modelReadiness: WorkflowModelReadiness(),
+      capturePreparationWorkflow: preparation,
+      feedbackPresenter: toast
+    )
+
+    let outcome = await workflow.startRecording { update in
+      previewUpdates.append(update)
+    }
+
+    #expect(outcome == .started)
+    #expect(recorder.startCalls == 1)
+    #expect(recorder.onAudioChunk == nil)
+    #expect(sessionRuntime.recordingState == .recording)
+    #expect(previewUpdates == [.reset, .reset])
+    #expect(toast.feedback.contains(RecordingFeedback(.livePreviewUnavailable)))
   }
 
   @Test func startFailureResetsRecorderAndSession() async {
@@ -101,21 +139,16 @@ struct RecordingCaptureStartWorkflowTests {
       sessionRuntime: sessionRuntime,
       modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
-      feedbackPresenter: toast,
-      callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        clearOverlayStatus: {},
-        startDurationChecks: {},
-        onPreviewUpdate: { update in
-          if case .reset = update {
-            partialTranscript = ""
-          }
-        },
-        onPreviewStartupFailure: {},
-        onRecordingStarted: {}
-      )
+      feedbackPresenter: toast
     )
 
-    await workflow.startRecording()
+    let outcome = await workflow.startRecording { update in
+      if case .reset = update {
+        partialTranscript = ""
+      }
+    }
+
+    #expect(outcome == .notStarted)
 
     #expect(recorder.startCalls == 1)
     #expect(recorder.resetCalls == 1)

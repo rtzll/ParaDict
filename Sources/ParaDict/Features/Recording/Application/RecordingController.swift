@@ -26,8 +26,6 @@ final class RecordingController: Sendable {
   var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }
 
   @ObservationIgnored
-  private var durationMonitor: RecordingDurationMonitor!
-  @ObservationIgnored
   private var feedbackPresenter: RecordingFeedbackPresenter!
   @ObservationIgnored
   private var transcriptionWorkflow: RecordingTranscriptionWorkflow!
@@ -104,14 +102,7 @@ final class RecordingController: Sendable {
       sessionRuntime: sessionRuntime,
       modelReadiness: self.modelReadiness,
       capturePreparationWorkflow: capturePreparationWorkflow,
-      feedbackPresenter: feedbackPresenter,
-      callbacks: RecordingCaptureStartWorkflow.Callbacks(
-        clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() },
-        startDurationChecks: { [weak self] in self?.startDurationChecks() },
-        onPreviewUpdate: { [weak self] update in self?.applyStreamingPreviewUpdate(update) },
-        onPreviewStartupFailure: { [weak self] in self?.handleStreamingPreviewStartupFailure() },
-        onRecordingStarted: { [weak self] in self?.onRecordingStarted?() }
-      )
+      feedbackPresenter: feedbackPresenter
     )
     captureShutdownWorkflow = RecordingCaptureShutdownWorkflow(
       recorder: recorder,
@@ -125,36 +116,14 @@ final class RecordingController: Sendable {
       mediaPlayback: mediaPlayback,
       captureStartWorkflow: captureStartWorkflow,
       captureShutdownWorkflow: captureShutdownWorkflow,
-      callbacks: RecordingSessionFlowController.Callbacks(
-        stopDurationChecks: { [weak self] in self?.stopDurationChecks() },
-        clearRecordingPresentation: { [weak self] in self?.clearRecordingPresentation() },
-        onRecordingEnded: { [weak self] in self?.onRecordingEnded?() },
-        presentFeedback: { [weak self] feedback in
-          self?.presentFeedback(feedback)
-        },
-        onCancelComplete: { [weak self] audioURL in
-          self?.presentFeedback(.init(.recordingCanceled))
-          if let audioURL {
-            try? FileManager.default.removeItem(at: audioURL)
-          }
-        },
-        transcribe: { [weak self] capture in
-          await self?.transcribe(capture)
-        }
-      )
-    )
-    durationMonitor = RecordingDurationMonitor(
+      feedbackPresenter: feedbackPresenter,
       maximumDuration: maxRecordingDuration,
       warningDuration: warningDuration,
-      currentDuration: { [unowned self] in self.recorder.currentDuration },
-      hasShownWarning: { [unowned self] in self.sessionRuntime.hasShownDurationWarning },
-      markWarningShown: { [unowned self] in self.sessionRuntime.markDurationWarningShown() },
-      onWarning: { [weak self] remainingSeconds in
-        self?.presentDurationWarning(remainingSeconds: remainingSeconds)
-      },
-      onLimitReached: { [weak self] in
-        self?.stopAndTranscribe()
-      }
+      callbacks: RecordingSessionFlowController.Callbacks(
+        handleEvent: { [weak self] event in
+          self?.handleSessionFlowEvent(event)
+        }
+      )
     )
   }
 
@@ -242,18 +211,6 @@ final class RecordingController: Sendable {
     }
   }
 
-  private func startDurationChecks() {
-    durationMonitor.start()
-  }
-
-  private func stopDurationChecks() {
-    durationMonitor.stop()
-  }
-
-  private func presentDurationWarning(remainingSeconds: Int) {
-    presentFeedback(.init(.recordingLimitWarning(remainingSeconds: remainingSeconds)))
-  }
-
   private func handleRecordingInterrupted(message: String) {
     recordingSessionFlowController.handleInterruption(message: message)
   }
@@ -280,6 +237,21 @@ final class RecordingController: Sendable {
 
   func reloadShortcuts() {
     CustomShortcutMonitor.shared.reloadShortcuts()
+  }
+
+  private func handleSessionFlowEvent(_ event: RecordingSessionFlowEvent) {
+    switch event {
+    case .recordingStarted:
+      onRecordingStarted?()
+    case .recordingEnded:
+      onRecordingEnded?()
+    case .previewUpdate(let update):
+      applyStreamingPreviewUpdate(update)
+    case .transcriptionRequested(let capture):
+      Task { [weak self] in
+        await self?.transcribe(capture)
+      }
+    }
   }
 
   private func presentFeedback(_ feedback: RecordingFeedback) {

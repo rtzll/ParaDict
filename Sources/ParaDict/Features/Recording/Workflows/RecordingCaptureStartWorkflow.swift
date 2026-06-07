@@ -18,23 +18,19 @@ protocol RecordingCapturePreparing: AnyObject {
   ) async -> Result<Void, Error>
 }
 
+enum RecordingCaptureStartOutcome: Equatable, Sendable {
+  case started
+  case notStarted
+}
+
 @MainActor
 final class RecordingCaptureStartWorkflow: Sendable {
-  struct Callbacks: Sendable {
-    let clearOverlayStatus: @MainActor () -> Void
-    let startDurationChecks: @MainActor () -> Void
-    let onPreviewUpdate: @MainActor (StreamingPreviewUpdate) -> Void
-    let onPreviewStartupFailure: @MainActor () -> Void
-    let onRecordingStarted: @MainActor () -> Void
-  }
-
   private let recorder: RecordingCaptureStarting
   private let mediaPlayback: MediaPlaybackController
   private let sessionRuntime: RecordingSessionRuntime
   private let modelReadiness: RecordingModelReadinessChecking
   private let capturePreparationWorkflow: RecordingCapturePreparing
   private let feedbackPresenter: RecordingFeedbackPresenting
-  private let callbacks: Callbacks
 
   init(
     recorder: RecordingCaptureStarting,
@@ -42,8 +38,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     sessionRuntime: RecordingSessionRuntime,
     modelReadiness: RecordingModelReadinessChecking,
     capturePreparationWorkflow: RecordingCapturePreparing,
-    feedbackPresenter: RecordingFeedbackPresenting,
-    callbacks: Callbacks
+    feedbackPresenter: RecordingFeedbackPresenting
   ) {
     self.recorder = recorder
     self.mediaPlayback = mediaPlayback
@@ -51,21 +46,23 @@ final class RecordingCaptureStartWorkflow: Sendable {
     self.modelReadiness = modelReadiness
     self.capturePreparationWorkflow = capturePreparationWorkflow
     self.feedbackPresenter = feedbackPresenter
-    self.callbacks = callbacks
   }
 
-  func startRecording() async {
-    guard canStartRecording() else { return }
+  func startRecording(
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) async -> RecordingCaptureStartOutcome {
+    guard canStartRecording() else { return .notStarted }
 
-    guard let session = preparePendingRecordingSession() else {
-      return
+    guard let session = preparePendingRecordingSession(onPreviewUpdate: onPreviewUpdate) else {
+      return .notStarted
     }
 
-    guard await beginRecordingCapture(for: session) else {
-      return
+    guard await beginRecordingCapture(for: session, onPreviewUpdate: onPreviewUpdate) else {
+      return .notStarted
     }
 
-    await startStreamingPreview(for: session)
+    await startStreamingPreview(for: session, onPreviewUpdate: onPreviewUpdate)
+    return .started
   }
 
   private func canStartRecording() -> Bool {
@@ -78,7 +75,9 @@ final class RecordingCaptureStartWorkflow: Sendable {
     return true
   }
 
-  private func preparePendingRecordingSession() -> PendingRecordingSession? {
+  private func preparePendingRecordingSession(
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) -> PendingRecordingSession? {
     let recordingId = Recording.generateId()
     sessionRuntime.beginActiveCapture(recordingId: recordingId)
     sessionRuntime.clearPendingCancelShortcut()
@@ -97,7 +96,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
       feedbackPresenter.present(.init(.microphoneFallbackToSystemDefault))
     }
 
-    callbacks.onPreviewUpdate(.reset)
+    onPreviewUpdate(.reset)
     recorder.onAudioChunk = { data in
       preparedSession.session.streamingSession.send(data)
     }
@@ -105,36 +104,40 @@ final class RecordingCaptureStartWorkflow: Sendable {
     return preparedSession.session
   }
 
-  private func beginRecordingCapture(for session: PendingRecordingSession) async -> Bool {
+  private func beginRecordingCapture(
+    for session: PendingRecordingSession,
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) async -> Bool {
     do {
       try await recorder.startRecording(
         to: session.audioURL,
         resolvedDevice: session.resolvedDevice
       )
-      callbacks.clearOverlayStatus()
-      callbacks.startDurationChecks()
+      feedbackPresenter.clearOverlayStatus()
       mediaPlayback.pauseMedia()
       sessionRuntime.markRecordingStarted()
-      callbacks.onRecordingStarted()
       return true
     } catch {
       feedbackPresenter.present(.init(.recordingStartFailed(error.localizedDescription)))
       recorder.reset()
       sessionRuntime.clearActiveCapture()
       sessionRuntime.markStartFailed()
-      callbacks.onPreviewUpdate(.reset)
+      onPreviewUpdate(.reset)
       recorder.onAudioChunk = nil
       await session.streamingSession.cancel()
       return false
     }
   }
 
-  private func startStreamingPreview(for session: PendingRecordingSession) async {
+  private func startStreamingPreview(
+    for session: PendingRecordingSession,
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) async {
     let result = await capturePreparationWorkflow.startStreamingPreview(
       for: session,
       inputSampleRate: recorder.actualSampleRate
-    ) { [callbacks] update in
-      callbacks.onPreviewUpdate(update)
+    ) { update in
+      onPreviewUpdate(update)
     }
 
     switch result {
@@ -142,7 +145,9 @@ final class RecordingCaptureStartWorkflow: Sendable {
       sessionRuntime.setActiveStreamingSession(session.streamingSession)
     case .failure:
       sessionRuntime.setActiveStreamingSession(nil)
-      callbacks.onPreviewStartupFailure()
+      recorder.onAudioChunk = nil
+      onPreviewUpdate(.reset)
+      feedbackPresenter.present(.init(.livePreviewUnavailable))
     }
   }
 }
