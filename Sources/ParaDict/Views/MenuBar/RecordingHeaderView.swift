@@ -20,7 +20,7 @@ struct RecordingHeaderView: View {
         Text(formatDuration(viewModel.currentDuration))
           .font(.system(size: 11, design: .monospaced))
           .foregroundColor(.secondary)
-      } else if !viewModel.isModelLoaded {
+      } else if viewModel.isModelLoading {
         ProgressView()
           .controlSize(.small)
       }
@@ -57,7 +57,8 @@ struct RecordingHeaderView: View {
     }
     switch viewModel.recordingState {
     case .idle:
-      return viewModel.isModelLoaded ? "Ready" : "Loading Parakeet..."
+      if viewModel.isModelLoading { return "Loading Parakeet..." }
+      return viewModel.isModelLoaded ? "Ready" : "Model Not Ready"
     case .recording: return "Recording"
     case .processing: return "Transcribing..."
     case .error(let msg): return msg

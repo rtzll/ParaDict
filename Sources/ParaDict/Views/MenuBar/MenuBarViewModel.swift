@@ -42,6 +42,7 @@ final class MenuBarViewModel: Sendable {
   var recordingState: RecordingState { recordingController.displayState }
   var currentDuration: TimeInterval { recordingController.recorder.currentDuration }
   var isModelLoaded: Bool { recordingController.isModelLoaded }
+  var isModelLoading: Bool { recordingController.isModelLoading }
   var allPermissionsGranted: Bool { permissions.allGranted }
   var accessibilityGranted: Bool { permissions.accessibilityGranted }
   var microphoneGranted: Bool { permissions.microphoneGranted }

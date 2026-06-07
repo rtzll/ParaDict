@@ -16,6 +16,8 @@ final class RecordingController: Sendable {
   private let analyticsRecording: AnalyticsRecording
   private let pasteboardWriter: PasteboardWriting
   private let sessionRuntime: RecordingSessionRuntime
+  private(set) var isModelLoaded: Bool
+  private(set) var isModelLoading = false
   @ObservationIgnored
   private var streamingTranscriptAccumulator = StreamingTranscriptAccumulator()
   var partialTranscript = ""
@@ -43,7 +45,6 @@ final class RecordingController: Sendable {
   var onRecordingStarted: (() -> Void)?
   var onRecordingEnded: (() -> Void)?
 
-  var isModelLoaded: Bool { transcriptionProvider.isInitialized }
   var recordingSessionState: RecordingSessionState { sessionRuntime.recordingState }
   var displayState: RecordingState {
     if case .error(let message) = recorder.state {
@@ -80,6 +81,7 @@ final class RecordingController: Sendable {
     self.recordingPersistence = recordingPersistence
     self.analyticsRecording = analyticsRecording
     self.pasteboardWriter = pasteboardWriter
+    self.isModelLoaded = transcriptionProvider.isInitialized
     recorder.onRecordingInterrupted = { [weak self] message in
       self?.handleRecordingInterrupted(message: message)
     }
@@ -163,11 +165,22 @@ final class RecordingController: Sendable {
   }
 
   func preloadModel() {
-    Task {
+    guard !isModelLoaded, !isModelLoading else { return }
+    isModelLoading = true
+
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.isModelLoading = false }
       do {
         try await transcriptionProvider.initialize()
+        isModelLoaded = true
       } catch {
-        toast.showError(title: "Model Load Failed", message: error.localizedDescription)
+        isModelLoaded = false
+        toast.showError(
+          title: "Model Load Failed",
+          message: error.localizedDescription,
+          anchor: .cursor()
+        )
       }
     }
   }
