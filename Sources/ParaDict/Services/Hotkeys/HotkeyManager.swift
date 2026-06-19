@@ -34,25 +34,48 @@ private final class RecordingActiveState: @unchecked Sendable {
   }
 }
 
+private final class ToggleHotkeyRoutingState: @unchecked Sendable {
+  private let lock = NSLock()
+  private var handledByCarbon = false
+
+  func setHandledByCarbon(_ enabled: Bool) {
+    lock.lock()
+    handledByCarbon = enabled
+    lock.unlock()
+  }
+
+  var shouldUseEventTapFallback: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return !handledByCarbon
+  }
+}
+
 @MainActor
 final class HotkeyManager {
   weak var delegate: HotkeyManagerDelegate?
 
   private let shortcutMonitor = CustomShortcutMonitor.shared
+  private let carbonToggleHotkey = CarbonHotkeyRegistrar(id: 1)
   private let recordingState = RecordingActiveState()
+  private let toggleRoutingState = ToggleHotkeyRoutingState()
 
   func start() {
     setupToggleRecording()
     setupCancelRecording()
+    registerCarbonToggleShortcut()
     shortcutMonitor.start()
   }
 
   func stop() {
+    carbonToggleHotkey.unregister()
+    toggleRoutingState.setHandledByCarbon(false)
     shortcutMonitor.stop()
   }
 
   func reloadShortcuts() {
     shortcutMonitor.reloadShortcuts()
+    registerCarbonToggleShortcut()
   }
 
   func recordingDidStart() {
@@ -64,6 +87,9 @@ final class HotkeyManager {
   }
 
   private func setupToggleRecording() {
+    shortcutMonitor.setEnabledCheck(for: .toggleRecording) { [toggleRoutingState] in
+      toggleRoutingState.shouldUseEventTapFallback
+    }
     shortcutMonitor.onKeyDown(for: .toggleRecording) { [weak self] in
       self?.delegate?.hotkeyDidToggleRecording()
     }
@@ -76,5 +102,18 @@ final class HotkeyManager {
     shortcutMonitor.onKeyUp(for: .cancelRecording) { [weak self] in
       self?.delegate?.hotkeyDidCancelRecording()
     }
+  }
+
+  private func registerCarbonToggleShortcut() {
+    guard let shortcut = CustomShortcutStorage.get(.toggleRecording) else {
+      carbonToggleHotkey.unregister()
+      toggleRoutingState.setHandledByCarbon(false)
+      return
+    }
+
+    let registered = carbonToggleHotkey.register(shortcut: shortcut) { [weak self] in
+      self?.delegate?.hotkeyDidToggleRecording()
+    }
+    toggleRoutingState.setHandledByCarbon(registered)
   }
 }

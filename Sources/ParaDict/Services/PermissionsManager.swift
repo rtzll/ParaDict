@@ -21,8 +21,8 @@ final class PermissionsManager: Sendable {
 
   func refresh() {
     microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-    // CGEventTap with .defaultTap (active tap) only needs Accessibility, not Input Monitoring.
-    // Input Monitoring is for passive taps (.listenOnly).
+    // CGEventTap with .defaultTap (active tap) needs Accessibility. Input
+    // Monitoring only lists apps that request passive listen-event access.
     accessibilityGranted = AXIsProcessTrusted()
 
     if allGranted && !wasAllGranted {

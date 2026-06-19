@@ -74,7 +74,7 @@ reset-tcc:
     sudo tccutil reset ListenEvent {{bundle_id}}
     sudo tccutil reset Accessibility {{bundle_id}}
     sudo tccutil reset Microphone {{bundle_id}}
-    @echo "TCC permissions reset. Re-run 'just run' and grant permissions when prompted."
+    @echo "TCC permissions reset. Re-run 'just dev' and grant permissions when prompted."
 
 # Reset app UserDefaults
 [group('dev')]
