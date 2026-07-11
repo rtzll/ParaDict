@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import Foundation
 import os.log
 
@@ -29,8 +28,8 @@ final class CustomShortcutMonitor: @unchecked Sendable {
     self.fnStateMachine = FnStateMachine()
     self.eventTapManager = EventTapManager()
 
-    eventTapManager.setEventCallback { [unowned self] type, event in
-      self.processEvent(type: type, event: event)
+    eventTapManager.setEventCallback { [unowned self] event in
+      self.processEvent(event)
     }
   }
 
@@ -73,27 +72,27 @@ final class CustomShortcutMonitor: @unchecked Sendable {
 
   // MARK: - Event Processing
 
-  private func processEvent(type: CGEventType, event: CGEvent) -> Bool {
-    let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-
-    if type == .flagsChanged {
-      return handleFlagsChanged(event: event, keyCode: keyCode)
+  private func processEvent(_ event: HotkeyInputEvent) -> Bool {
+    if event.kind == .flagsChanged {
+      return handleFlagsChanged(event)
     }
 
-    let flags = event.flags
-    let modifiers = flags.modifierFlags
-    let fnPressed = fnStateMachine.isFnKeyDown || flags.contains(.maskSecondaryFn)
+    let fnPressed = fnStateMachine.isFnKeyDown || event.fnPressed
 
-    if type == .keyDown {
-      let result = handleKeyDown(keyCode: keyCode, modifiers: modifiers, fnPressed: fnPressed)
+    if event.kind == .keyDown {
+      let result = handleKeyDown(
+        keyCode: event.keyCode,
+        modifiers: event.modifiers,
+        fnPressed: fnPressed
+      )
       if result {
         log.info(
-          "Matched keyDown: keyCode=\(keyCode) cmd=\(modifiers.contains(.command)) opt=\(modifiers.contains(.option))"
+          "Matched keyDown: keyCode=\(event.keyCode) cmd=\(event.modifiers.contains(.command)) opt=\(event.modifiers.contains(.option))"
         )
       }
       return result
-    } else if type == .keyUp {
-      return handleKeyUp(keyCode: keyCode)
+    } else if event.kind == .keyUp {
+      return handleKeyUp(keyCode: event.keyCode)
     }
 
     return false
@@ -178,18 +177,16 @@ final class CustomShortcutMonitor: @unchecked Sendable {
     return true
   }
 
-  private func handleFlagsChanged(event: CGEvent, keyCode: UInt16) -> Bool {
-    let captureTime = CFAbsoluteTimeGetCurrent()
-    let hwTimestamp = event.timestamp
-    let flags = event.flags
-    let fnPressed = flags.contains(.maskSecondaryFn)
-    let isFnKey = FnKeyCode.isFnKey(keyCode)
+  private func handleFlagsChanged(_ event: HotkeyInputEvent) -> Bool {
+    let isFnKey = FnKeyCode.isFnKey(event.keyCode)
 
     guard isFnKey else { return false }
 
-    if fnPressed {
+    if event.fnPressed {
       let isNewPress = fnStateMachine.processFnKeyDown(
-        captureTime: captureTime, hwTimestamp: hwTimestamp)
+        captureTime: event.captureTime,
+        hwTimestamp: event.hardwareTimestamp
+      )
       guard isNewPress else { return false }
 
       if let match = shortcutMatcher.findFnOnlyShortcut(),
@@ -203,7 +200,10 @@ final class CustomShortcutMonitor: @unchecked Sendable {
       }
       return shortcutMatcher.hasFnOnlyShortcut()
     } else {
-      let result = fnStateMachine.processFnKeyUp(captureTime: captureTime, hwTimestamp: hwTimestamp)
+      let result = fnStateMachine.processFnKeyUp(
+        captureTime: event.captureTime,
+        hwTimestamp: event.hardwareTimestamp
+      )
       switch result {
       case .fnKeyUp:
         if let name = fnStateMachine.clearActiveFnOnlyShortcut(),

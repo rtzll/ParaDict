@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -5,12 +6,27 @@ import os.log
 
 private let log = Logger(subsystem: Logger.subsystem, category: "EventTap")
 
+struct HotkeyInputEvent: Sendable {
+  enum Kind: Equatable, Sendable {
+    case keyDown
+    case keyUp
+    case flagsChanged
+  }
+
+  let kind: Kind
+  let keyCode: UInt16
+  let modifiers: NSEvent.ModifierFlags
+  let fnPressed: Bool
+  let hardwareTimestamp: UInt64
+  let captureTime: CFAbsoluteTime
+}
+
 /// All mutable state is isolated to `@MainActor` except `callback`, which is
 /// set once before the tap starts and never mutated afterward. The C callback
 /// may read `callback` from the event-tap thread, but the value is effectively
 /// immutable after setup.
 final class EventTapManager: @unchecked Sendable {
-  typealias EventCallback = (CGEventType, CGEvent) -> Bool
+  typealias EventCallback = (HotkeyInputEvent) -> Bool
 
   private var eventTap: CFMachPort?
   private var runLoopSource: CFRunLoopSource?
@@ -92,8 +108,29 @@ final class EventTapManager: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
           }
 
+          let kind: HotkeyInputEvent.Kind
+          switch type {
+          case .keyDown:
+            kind = .keyDown
+          case .keyUp:
+            kind = .keyUp
+          case .flagsChanged:
+            kind = .flagsChanged
+          default:
+            return Unmanaged.passUnretained(event)
+          }
+
           if let callback = manager.callback {
-            let consumed = callback(type, event)
+            let flags = event.flags
+            let input = HotkeyInputEvent(
+              kind: kind,
+              keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
+              modifiers: flags.modifierFlags,
+              fnPressed: flags.contains(.maskSecondaryFn),
+              hardwareTimestamp: event.timestamp,
+              captureTime: CFAbsoluteTimeGetCurrent()
+            )
+            let consumed = callback(input)
             return consumed ? nil : Unmanaged.passUnretained(event)
           }
 
