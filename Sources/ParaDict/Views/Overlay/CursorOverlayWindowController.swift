@@ -51,34 +51,20 @@ final class CursorOverlayWindowController: Sendable {
     height: RecordingOverlayView.compactSize.height
   )
 
-  func update(
-    state: RecordingState,
-    duration: TimeInterval,
-    meterLevel: Double,
-    partialTranscript: String,
-    overlayStatus: OverlayStatus?,
-    overlayHint: OverlayHint?
-  ) {
-    switch state {
+  func update(_ snapshot: OverlaySnapshot) {
+    switch snapshot.state {
     case .recording, .processing:
       show()
       applyContent(
-        state: state, duration: duration, meterLevel: meterLevel,
-        partialTranscript: partialTranscript, overlayStatus: overlayStatus, overlayHint: overlayHint
+        snapshot
       )
-    case .error(let message):
+    case .error:
       show()
-      applyContent(
-        state: .error(message), duration: duration, meterLevel: meterLevel,
-        partialTranscript: partialTranscript, overlayStatus: overlayStatus, overlayHint: overlayHint
-      )
+      applyContent(snapshot)
     case .idle:
-      if overlayStatus != nil {
+      if snapshot.status != nil {
         show()
-        applyContent(
-          state: state, duration: duration, meterLevel: meterLevel,
-          partialTranscript: partialTranscript, overlayStatus: overlayStatus,
-          overlayHint: overlayHint)
+        applyContent(snapshot)
       } else {
         hide()
       }
@@ -134,25 +120,18 @@ final class CursorOverlayWindowController: Sendable {
     self.hostingView = hostingView
   }
 
-  private func applyContent(
-    state: RecordingState,
-    duration: TimeInterval,
-    meterLevel: Double,
-    partialTranscript: String,
-    overlayStatus: OverlayStatus?,
-    overlayHint: OverlayHint?
-  ) {
-    model.state = state
-    model.duration = duration
-    model.meterLevel = meterLevel
-    model.partialTranscript = partialTranscript
-    model.overlayStatus = overlayStatus
-    model.overlayHint = overlayHint
+  private func applyContent(_ snapshot: OverlaySnapshot) {
+    model.state = snapshot.state
+    model.duration = snapshot.duration
+    model.meterLevel = snapshot.meterLevel
+    model.partialTranscript = snapshot.partialTranscript
+    model.overlayStatus = snapshot.status
+    model.overlayHint = snapshot.hint
 
     let nextSize = size(
-      for: state,
-      partialTranscript: partialTranscript,
-      overlayStatus: overlayStatus
+      for: snapshot.state,
+      partialTranscript: snapshot.partialTranscript,
+      overlayStatus: snapshot.status
     )
     if nextSize != currentSize {
       currentSize = nextSize

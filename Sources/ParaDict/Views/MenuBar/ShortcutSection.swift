@@ -13,7 +13,7 @@ struct ShortcutSection: View {
         HStack(spacing: 8) {
           ShortcutRecorderView(
             shortcut: Binding(
-              get: { viewModel.toggleRecordingShortcut },
+              get: { viewModel.snapshot.toggleRecordingShortcut },
               set: { newShortcut in
                 viewModel.updateToggleRecordingShortcut(newShortcut)
                 isEditing = false
@@ -47,7 +47,7 @@ struct ShortcutSection: View {
 
             Spacer(minLength: 12)
 
-            if let shortcut = viewModel.toggleRecordingShortcut {
+            if let shortcut = viewModel.snapshot.toggleRecordingShortcut {
               Text(shortcut.compactDisplayString)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(.secondary)

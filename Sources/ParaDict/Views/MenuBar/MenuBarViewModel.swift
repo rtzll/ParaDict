@@ -2,6 +2,24 @@ import AppKit
 import Foundation
 import Observation
 
+struct MenuBarSnapshot: Sendable {
+  let recordingState: RecordingState
+  let currentDuration: TimeInterval
+  let modelReadiness: ModelReadinessMenuPresentation
+  let allPermissionsGranted: Bool
+  let accessibilityGranted: Bool
+  let microphoneGranted: Bool
+  let inputMode: MicInputMode
+  let selectedDeviceUID: String?
+  let systemDefaultDeviceName: String
+  let effectiveDeviceName: String
+  let isSelectedDeviceAvailable: Bool
+  let availableDevices: [AudioInputDevice]
+  let recentHistoryItems: [Recording]
+  let statistics: RecordingStatistics
+  let toggleRecordingShortcut: CustomShortcut?
+}
+
 @Observable
 @MainActor
 final class MenuBarViewModel: Sendable {
@@ -35,31 +53,25 @@ final class MenuBarViewModel: Sendable {
     self.quitApplicationAction = quitApplicationAction
   }
 
-  var recorder: AudioRecorder { recordingController.recorder }
-  var recordingState: RecordingState { recordingController.displayState }
-  var currentDuration: TimeInterval { recordingController.recorder.currentDuration }
-  var isModelLoaded: Bool { recordingController.isModelLoaded }
-  var isModelLoading: Bool { recordingController.isModelLoading }
-  var modelReadinessPresentation: ModelReadinessMenuPresentation {
-    recordingController.modelReadinessPresentation
+  var snapshot: MenuBarSnapshot {
+    MenuBarSnapshot(
+      recordingState: recordingController.displayState,
+      currentDuration: recordingController.recorder.currentDuration,
+      modelReadiness: recordingController.modelReadinessPresentation,
+      allPermissionsGranted: permissions.allGranted,
+      accessibilityGranted: permissions.accessibilityGranted,
+      microphoneGranted: permissions.microphoneGranted,
+      inputMode: recordingController.deviceManager.inputMode,
+      selectedDeviceUID: recordingController.deviceManager.selectedDeviceUID,
+      systemDefaultDeviceName: recordingController.deviceManager.systemDefaultDeviceName,
+      effectiveDeviceName: recordingController.deviceManager.effectiveDeviceName,
+      isSelectedDeviceAvailable: recordingController.deviceManager.isSelectedDeviceAvailable,
+      availableDevices: recordingController.deviceManager.availableDevices,
+      recentHistoryItems: recordingHistory.recentHistoryItems,
+      statistics: recordingHistory.statistics,
+      toggleRecordingShortcut: CustomShortcutStorage.get(.toggleRecording)
+    )
   }
-  var allPermissionsGranted: Bool { permissions.allGranted }
-  var accessibilityGranted: Bool { permissions.accessibilityGranted }
-  var microphoneGranted: Bool { permissions.microphoneGranted }
-  var inputMode: MicInputMode { recordingController.deviceManager.inputMode }
-  var selectedDeviceUID: String? { recordingController.deviceManager.selectedDeviceUID }
-  var systemDefaultDeviceName: String { recordingController.deviceManager.systemDefaultDeviceName }
-  var effectiveDeviceName: String { recordingController.deviceManager.effectiveDeviceName }
-  var isSelectedDeviceAvailable: Bool {
-    recordingController.deviceManager.isSelectedDeviceAvailable
-  }
-  var availableDevices: [AudioInputDevice] { recordingController.deviceManager.availableDevices }
-  var recentHistoryItems: [Recording] { recordingHistory.recentHistoryItems }
-  var formattedRecordings: String { recordingHistory.statistics.formattedRecordings }
-  var formattedSpeakingTime: String { recordingHistory.statistics.formattedSpeakingTime }
-  var formattedWords: String { recordingHistory.statistics.formattedWords }
-  var averageWPM: String { "\(recordingHistory.statistics.averageWPM)" }
-  var toggleRecordingShortcut: CustomShortcut? { CustomShortcutStorage.get(.toggleRecording) }
 
   func selectDevice(_ device: AudioInputDevice) {
     recordingController.deviceManager.selectDevice(device)

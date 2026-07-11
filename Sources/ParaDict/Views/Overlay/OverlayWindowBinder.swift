@@ -19,23 +19,11 @@ final class OverlayWindowBinder {
 
   private func observe() {
     withObservationTracking {
-      _ = self.viewModel.state
-      _ = self.viewModel.duration
-      _ = self.viewModel.meterLevel
-      _ = self.viewModel.partialTranscript
-      _ = self.viewModel.overlayStatus
-      _ = self.viewModel.overlayHint
+      _ = self.viewModel.snapshot
     } onChange: {
       Task { @MainActor [weak self] in
         guard let self else { return }
-        windowController.update(
-          state: viewModel.state,
-          duration: viewModel.duration,
-          meterLevel: viewModel.meterLevel,
-          partialTranscript: viewModel.partialTranscript,
-          overlayStatus: viewModel.overlayStatus,
-          overlayHint: viewModel.overlayHint
-        )
+        windowController.update(viewModel.snapshot)
         observe()
       }
     }

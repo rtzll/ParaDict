@@ -12,7 +12,7 @@ struct HistoryPopoverView: View {
         .tracking(0.5)
         .padding(.horizontal, 10)
 
-      if viewModel.recentHistoryItems.isEmpty {
+      if viewModel.snapshot.recentHistoryItems.isEmpty {
         Text("No recent transcripts")
           .font(.system(size: 13))
           .foregroundColor(.secondary.opacity(0.7))
@@ -21,7 +21,7 @@ struct HistoryPopoverView: View {
           .padding(.horizontal, 10)
       } else {
         VStack(spacing: 2) {
-          ForEach(viewModel.recentHistoryItems) { recording in
+          ForEach(viewModel.snapshot.recentHistoryItems) { recording in
             HistoryPopoverRow(recording: recording)
           }
         }

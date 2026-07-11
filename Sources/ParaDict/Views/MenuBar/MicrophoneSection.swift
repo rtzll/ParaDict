@@ -13,18 +13,18 @@ struct MicrophoneSection: View {
         showPicker.toggle()
       } label: {
         HStack(spacing: 8) {
-          Text(viewModel.effectiveDeviceName)
+          Text(viewModel.snapshot.effectiveDeviceName)
             .font(.system(size: 13))
             .lineLimit(1)
             .truncationMode(.tail)
 
           Spacer(minLength: 12)
 
-          if viewModel.inputMode == .systemDefault {
+          if viewModel.snapshot.inputMode == .systemDefault {
             Text("System Default")
               .font(.system(size: 10))
               .foregroundColor(.secondary)
-          } else if !viewModel.isSelectedDeviceAvailable {
+          } else if !viewModel.snapshot.isSelectedDeviceAvailable {
             Text("Unavailable")
               .font(.system(size: 10))
               .foregroundColor(.orange)
@@ -71,23 +71,23 @@ private struct MicrophonePickerView: View {
         // System Default option
         MicPickerRow(
           name: "System Default",
-          subtitle: viewModel.systemDefaultDeviceName,
-          isSelected: viewModel.inputMode == .systemDefault
+          subtitle: viewModel.snapshot.systemDefaultDeviceName,
+          isSelected: viewModel.snapshot.inputMode == .systemDefault
         ) {
           viewModel.selectSystemDefaultMicrophone()
         }
 
-        if !viewModel.availableDevices.isEmpty {
+        if !viewModel.snapshot.availableDevices.isEmpty {
           Divider()
             .padding(.horizontal, 10)
             .padding(.vertical, 2)
 
-          ForEach(viewModel.availableDevices) { device in
+          ForEach(viewModel.snapshot.availableDevices) { device in
             MicPickerRow(
               name: device.name,
               subtitle: nil,
-              isSelected: viewModel.inputMode == .specificDevice
-                && viewModel.selectedDeviceUID == device.uid
+              isSelected: viewModel.snapshot.inputMode == .specificDevice
+                && viewModel.snapshot.selectedDeviceUID == device.uid
             ) {
               viewModel.selectDevice(device)
             }

@@ -9,7 +9,7 @@ struct PermissionsBanner: View {
         title: "Permissions Needed", icon: "exclamationmark.shield.fill", iconColor: .orange)
 
       VStack(spacing: 4) {
-        if !viewModel.accessibilityGranted {
+        if !viewModel.snapshot.accessibilityGranted {
           PermissionRow(
             icon: "keyboard",
             label: "Accessibility",
@@ -19,7 +19,7 @@ struct PermissionsBanner: View {
           }
         }
 
-        if !viewModel.microphoneGranted {
+        if !viewModel.snapshot.microphoneGranted {
           PermissionRow(
             icon: "mic.slash",
             label: "Microphone",

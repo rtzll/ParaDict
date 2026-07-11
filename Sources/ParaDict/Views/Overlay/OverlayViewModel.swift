@@ -1,6 +1,15 @@
 import Foundation
 import Observation
 
+struct OverlaySnapshot: Equatable, Sendable {
+  let state: RecordingState
+  let duration: TimeInterval
+  let meterLevel: Double
+  let partialTranscript: String
+  let status: OverlayStatus?
+  let hint: OverlayHint?
+}
+
 @Observable
 @MainActor
 final class OverlayViewModel: Sendable {
@@ -10,10 +19,14 @@ final class OverlayViewModel: Sendable {
     self.recordingController = recordingController
   }
 
-  var state: RecordingState { recordingController.displayState }
-  var duration: TimeInterval { recordingController.recorder.currentDuration }
-  var meterLevel: Double { recordingController.recorder.meterLevel }
-  var partialTranscript: String { recordingController.partialTranscript }
-  var overlayStatus: OverlayStatus? { recordingController.overlayStatus }
-  var overlayHint: OverlayHint? { recordingController.overlayHint }
+  var snapshot: OverlaySnapshot {
+    OverlaySnapshot(
+      state: recordingController.displayState,
+      duration: recordingController.recorder.currentDuration,
+      meterLevel: recordingController.recorder.meterLevel,
+      partialTranscript: recordingController.partialTranscript,
+      status: recordingController.overlayStatus,
+      hint: recordingController.overlayHint
+    )
+  }
 }

@@ -5,10 +5,10 @@ struct StatsBarView: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      StatCard(label: "Recordings", value: viewModel.formattedRecordings)
-      StatCard(label: "Duration", value: viewModel.formattedSpeakingTime)
-      StatCard(label: "Words", value: viewModel.formattedWords)
-      StatCard(label: "Avg WPM", value: viewModel.averageWPM)
+      StatCard(label: "Recordings", value: viewModel.snapshot.statistics.formattedRecordings)
+      StatCard(label: "Duration", value: viewModel.snapshot.statistics.formattedSpeakingTime)
+      StatCard(label: "Words", value: viewModel.snapshot.statistics.formattedWords)
+      StatCard(label: "Avg WPM", value: "\(viewModel.snapshot.statistics.averageWPM)")
     }
   }
 }

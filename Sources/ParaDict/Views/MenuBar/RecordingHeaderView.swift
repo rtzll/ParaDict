@@ -16,17 +16,17 @@ struct RecordingHeaderView: View {
 
       Spacer()
 
-      if viewModel.recordingState.isRecording {
-        Text(formatDuration(viewModel.currentDuration))
+      if viewModel.snapshot.recordingState.isRecording {
+        Text(formatDuration(viewModel.snapshot.currentDuration))
           .font(.system(size: 11, design: .monospaced))
           .foregroundColor(.secondary)
-      } else if viewModel.allPermissionsGranted,
-        viewModel.modelReadinessPresentation.showsProgress
+      } else if viewModel.snapshot.allPermissionsGranted,
+        viewModel.snapshot.modelReadiness.showsProgress
       {
         ProgressView()
           .controlSize(.small)
-      } else if viewModel.allPermissionsGranted,
-        let retryTitle = viewModel.modelReadinessPresentation.retryTitle
+      } else if viewModel.snapshot.allPermissionsGranted,
+        let retryTitle = viewModel.snapshot.modelReadiness.retryTitle
       {
         Button(retryTitle) {
           viewModel.retryModelLoading()
@@ -38,11 +38,11 @@ struct RecordingHeaderView: View {
   }
 
   private var statusIcon: String {
-    if !viewModel.allPermissionsGranted {
+    if !viewModel.snapshot.allPermissionsGranted {
       return "exclamationmark.triangle.fill"
     }
-    switch viewModel.recordingState {
-    case .idle: return viewModel.modelReadinessPresentation.systemImage
+    switch viewModel.snapshot.recordingState {
+    case .idle: return viewModel.snapshot.modelReadiness.systemImage
     case .recording: return "record.circle.fill"
     case .processing: return "waveform.badge.ellipsis"
     case .error: return "exclamationmark.triangle.fill"
@@ -50,10 +50,10 @@ struct RecordingHeaderView: View {
   }
 
   private var statusColor: Color {
-    if !viewModel.allPermissionsGranted {
+    if !viewModel.snapshot.allPermissionsGranted {
       return .orange
     }
-    switch viewModel.recordingState {
+    switch viewModel.snapshot.recordingState {
     case .idle: return modelReadinessColor
     case .recording: return .red
     case .processing: return .orange
@@ -62,11 +62,11 @@ struct RecordingHeaderView: View {
   }
 
   private var statusText: String {
-    if !viewModel.allPermissionsGranted {
+    if !viewModel.snapshot.allPermissionsGranted {
       return "Permissions Required"
     }
-    switch viewModel.recordingState {
-    case .idle: return viewModel.modelReadinessPresentation.title
+    switch viewModel.snapshot.recordingState {
+    case .idle: return viewModel.snapshot.modelReadiness.title
     case .recording: return "Recording"
     case .processing: return "Transcribing..."
     case .error(let msg): return msg
@@ -74,7 +74,7 @@ struct RecordingHeaderView: View {
   }
 
   private var modelReadinessColor: Color {
-    switch viewModel.modelReadinessPresentation.tone {
+    switch viewModel.snapshot.modelReadiness.tone {
     case .ready: return .secondary
     case .pending: return .orange
     case .failed: return .red

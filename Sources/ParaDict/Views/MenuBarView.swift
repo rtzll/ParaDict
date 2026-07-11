@@ -12,7 +12,7 @@ struct MenuBarView: View {
       Divider()
         .padding(.horizontal, 12)
 
-      if !viewModel.allPermissionsGranted {
+      if !viewModel.snapshot.allPermissionsGranted {
         PermissionsBanner()
           .padding(.horizontal, 16)
           .padding(.top, 14)
