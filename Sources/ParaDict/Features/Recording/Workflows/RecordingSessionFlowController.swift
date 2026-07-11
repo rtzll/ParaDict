@@ -8,7 +8,7 @@ enum RecordingSessionFlowEvent: Sendable {
 }
 
 @MainActor
-final class RecordingSessionFlowController: Sendable {
+final class RecordingSession: Sendable {
   struct Callbacks: Sendable {
     let handleEvent: @MainActor (RecordingSessionFlowEvent) -> Void
   }
@@ -42,15 +42,37 @@ final class RecordingSessionFlowController: Sendable {
 
   init(
     recorder: AudioRecorder,
-    sessionRuntime: RecordingSessionRuntime,
+    deviceManager: AudioDeviceManager,
     mediaPlayback: MediaPlaybackController,
-    captureStartWorkflow: RecordingCaptureStartWorkflow,
-    captureShutdownWorkflow: RecordingCaptureShutdownWorkflow,
+    transcriptionProvider: TranscriptionProviding,
+    modelReadiness: RecordingModelReadinessChecking,
     feedbackPresenter: RecordingFeedbackPresenting,
     maximumDuration: TimeInterval,
     warningDuration: TimeInterval,
+    clearRecordingPresentation: @escaping @MainActor () -> Void,
+    clearOverlayStatus: @escaping @MainActor () -> Void,
     callbacks: Callbacks
   ) {
+    let sessionRuntime = RecordingSessionRuntime()
+    let capturePreparationWorkflow = RecordingCapturePreparationWorkflow(
+      deviceResolver: deviceManager,
+      modelProvider: transcriptionProvider
+    )
+    let captureStartWorkflow = RecordingCaptureStartWorkflow(
+      recorder: recorder,
+      mediaPlayback: mediaPlayback,
+      sessionRuntime: sessionRuntime,
+      modelReadiness: modelReadiness,
+      capturePreparationWorkflow: capturePreparationWorkflow,
+      feedbackPresenter: feedbackPresenter
+    )
+    let captureShutdownWorkflow = RecordingCaptureShutdownWorkflow(
+      recorder: recorder,
+      sessionRuntime: sessionRuntime,
+      clearRecordingPresentation: clearRecordingPresentation,
+      clearOverlayStatus: clearOverlayStatus
+    )
+
     self.recorder = recorder
     self.sessionRuntime = sessionRuntime
     self.mediaPlayback = mediaPlayback
@@ -60,6 +82,24 @@ final class RecordingSessionFlowController: Sendable {
     self.maximumDuration = maximumDuration
     self.warningDuration = warningDuration
     self.callbacks = callbacks
+  }
+
+  var state: RecordingSessionState { sessionRuntime.recordingState }
+  var overlayHint: OverlayHint? { sessionRuntime.overlayHint }
+
+  func handleCancelShortcut() {
+    guard state == .recording else { return }
+
+    if sessionRuntime.isCancelShortcutArmed {
+      sessionRuntime.clearPendingCancelShortcut()
+      Task { await cancel() }
+    } else {
+      sessionRuntime.armCancelShortcut()
+    }
+  }
+
+  func finishProcessing() {
+    sessionRuntime.finishProcessing()
   }
 
   func start() async {
@@ -125,4 +165,10 @@ final class RecordingSessionFlowController: Sendable {
     }
     callbacks.handleEvent(.recordingEnded)
   }
+
+  #if DEBUG
+    func forceStateForTesting(_ state: RecordingSessionState) {
+      sessionRuntime.forceStateForTesting(state)
+    }
+  #endif
 }

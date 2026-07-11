@@ -16,13 +16,11 @@ final class AppContainer {
     let recordingHistory = RecordingHistory()
     let permissions = PermissionsManager()
     let pasteboard = PasteboardService()
-    let sessionRuntime = RecordingSessionRuntime()
 
     let recordingController = RecordingController(
       recorder: recorder,
       deviceManager: deviceManager,
       mediaPlayback: mediaPlayback,
-      sessionRuntime: sessionRuntime,
       toast: toast,
       transcriptionProvider: ParakeetProvider(),
       recordingHistory: recordingHistory,

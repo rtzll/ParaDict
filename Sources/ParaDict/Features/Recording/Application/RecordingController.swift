@@ -14,12 +14,11 @@ final class RecordingController: Sendable {
   private let modelReadiness: RecordingModelReadinessChecking
   private let recordingHistory: RecordingHistoryWriting
   private let pasteboardWriter: PasteboardWriting
-  private let sessionRuntime: RecordingSessionRuntime
   @ObservationIgnored
   private var streamingTranscriptAccumulator = StreamingTranscriptAccumulator()
   var partialTranscript = ""
   var overlayStatus: OverlayStatus?
-  var overlayHint: OverlayHint? { sessionRuntime.overlayHint }
+  var overlayHint: OverlayHint? { recordingSession.overlayHint }
 
   let maxRecordingDuration: TimeInterval = 600.0
   var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }
@@ -29,18 +28,12 @@ final class RecordingController: Sendable {
   @ObservationIgnored
   private var transcriptionWorkflow: RecordingTranscriptionWorkflow!
   @ObservationIgnored
-  private var capturePreparationWorkflow: RecordingCapturePreparationWorkflow!
-  @ObservationIgnored
-  private var captureShutdownWorkflow: RecordingCaptureShutdownWorkflow!
-  @ObservationIgnored
-  private var captureStartWorkflow: RecordingCaptureStartWorkflow!
-  @ObservationIgnored
-  private var recordingSessionFlowController: RecordingSessionFlowController!
+  private var recordingSession: RecordingSession!
 
   var onRecordingStarted: (() -> Void)?
   var onRecordingEnded: (() -> Void)?
 
-  var recordingSessionState: RecordingSessionState { sessionRuntime.recordingState }
+  var recordingSessionState: RecordingSessionState { recordingSession.state }
   var displayState: RecordingState {
     if case .error(let message) = recorder.state {
       return .error(message)
@@ -60,7 +53,6 @@ final class RecordingController: Sendable {
     recorder: AudioRecorder = AudioRecorder(),
     deviceManager: AudioDeviceManager = AudioDeviceManager(),
     mediaPlayback: MediaPlaybackController = MediaPlaybackController(),
-    sessionRuntime: RecordingSessionRuntime = RecordingSessionRuntime(),
     toast: ToastPresenting = ToastWindowController.shared,
     transcriptionProvider: TranscriptionProviding,
     modelReadiness: RecordingModelReadinessChecking? = nil,
@@ -70,7 +62,6 @@ final class RecordingController: Sendable {
     self.recorder = recorder
     self.deviceManager = deviceManager
     self.mediaPlayback = mediaPlayback
-    self.sessionRuntime = sessionRuntime
     self.toast = toast
     self.transcriptionProvider = transcriptionProvider
     self.modelReadiness =
@@ -88,34 +79,18 @@ final class RecordingController: Sendable {
       recordingHistory: recordingHistory,
       pasteboardWriter: pasteboardWriter
     )
-    capturePreparationWorkflow = RecordingCapturePreparationWorkflow(
-      deviceResolver: deviceManager,
-      modelProvider: transcriptionProvider
-    )
-    captureStartWorkflow = RecordingCaptureStartWorkflow(
+    recordingSession = RecordingSession(
       recorder: recorder,
+      deviceManager: deviceManager,
       mediaPlayback: mediaPlayback,
-      sessionRuntime: sessionRuntime,
+      transcriptionProvider: transcriptionProvider,
       modelReadiness: self.modelReadiness,
-      capturePreparationWorkflow: capturePreparationWorkflow,
-      feedbackPresenter: feedbackPresenter
-    )
-    captureShutdownWorkflow = RecordingCaptureShutdownWorkflow(
-      recorder: recorder,
-      sessionRuntime: sessionRuntime,
-      clearRecordingPresentation: { [weak self] in self?.clearRecordingPresentation() },
-      clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() }
-    )
-    recordingSessionFlowController = RecordingSessionFlowController(
-      recorder: recorder,
-      sessionRuntime: sessionRuntime,
-      mediaPlayback: mediaPlayback,
-      captureStartWorkflow: captureStartWorkflow,
-      captureShutdownWorkflow: captureShutdownWorkflow,
       feedbackPresenter: feedbackPresenter,
       maximumDuration: maxRecordingDuration,
       warningDuration: warningDuration,
-      callbacks: RecordingSessionFlowController.Callbacks(
+      clearRecordingPresentation: { [weak self] in self?.clearRecordingPresentation() },
+      clearOverlayStatus: { [weak self] in self?.clearOverlayStatus() },
+      callbacks: RecordingSession.Callbacks(
         handleEvent: { [weak self] event in
           self?.handleSessionFlowEvent(event)
         }
@@ -146,27 +121,19 @@ final class RecordingController: Sendable {
   }
 
   func startRecording() {
-    Task { await recordingSessionFlowController.start() }
+    Task { await recordingSession.start() }
   }
 
   func stopAndTranscribe() {
-    Task { await recordingSessionFlowController.stopAndTranscribe() }
+    Task { await recordingSession.stopAndTranscribe() }
   }
 
   func cancelRecording() {
-    Task { await recordingSessionFlowController.cancel() }
+    Task { await recordingSession.cancel() }
   }
 
   func handleCancelRecordingShortcut() {
-    guard recordingSessionState == .recording else { return }
-
-    if sessionRuntime.isCancelShortcutArmed {
-      sessionRuntime.clearPendingCancelShortcut()
-      cancelRecording()
-      return
-    }
-
-    sessionRuntime.armCancelShortcut()
+    recordingSession.handleCancelShortcut()
   }
 
   func transcribe(_ capture: CompletedRecordingCapture) async {
@@ -189,7 +156,7 @@ final class RecordingController: Sendable {
   }
 
   private func resetTranscriptionPresentation() {
-    sessionRuntime.finishProcessing()
+    recordingSession.finishProcessing()
     clearRecordingPresentation()
     recorder.reset()
   }
@@ -208,7 +175,7 @@ final class RecordingController: Sendable {
   }
 
   private func handleRecordingInterrupted(message: String) {
-    recordingSessionFlowController.handleInterruption(message: message)
+    recordingSession.handleInterruption(message: message)
   }
 
   private func clearRecordingPresentation() {
@@ -262,7 +229,7 @@ final class RecordingController: Sendable {
 #if DEBUG
   extension RecordingController {
     func setRecordingSessionStateForTesting(_ state: RecordingSessionState) {
-      sessionRuntime.forceStateForTesting(state)
+      recordingSession.forceStateForTesting(state)
     }
   }
 #endif
