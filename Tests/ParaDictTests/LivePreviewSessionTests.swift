@@ -7,8 +7,9 @@ import Testing
 struct LivePreviewSessionTests {
   @Test func transientFailureRecoversOnTheNextScheduledPass() async {
     let transcriber = RecoveringLivePreviewTranscriber()
+    let clock = ManualLivePreviewClock()
     let session = LivePreviewSession(
-      clock: FastLivePreviewClock(),
+      clock: clock,
       transcriptionPass: { samples, sampleRate, timeOffset in
         try await transcriber.transcribe(
           samples: samples,
@@ -22,9 +23,20 @@ struct LivePreviewSessionTests {
     await session.startPrepared(inputSampleRate: 16_000) { update in
       updates.append(update)
     }
-    session.send(audioData(sampleCount: 16_000))
+    await session.accept(audioData(sampleCount: 16_000))
 
-    try? await Task.sleep(for: .milliseconds(80))
+    await clock.waitUntilScheduled()
+    await clock.tick()
+    await transcriber.waitUntilCallCount(1)
+
+    await clock.waitUntilScheduled()
+    await clock.tick()
+    await transcriber.waitUntilCallCount(2)
+    while !updates.contains(.partial("recovered preview")) {
+      await Task.yield()
+    }
+
+    await clock.finish()
     await session.cancel()
 
     #expect(await transcriber.callCount >= 2)
@@ -37,9 +49,34 @@ struct LivePreviewSessionTests {
   }
 }
 
-private struct FastLivePreviewClock: LivePreviewClock {
+private actor ManualLivePreviewClock: LivePreviewClock {
+  private var waiters: [CheckedContinuation<Void, any Error>] = []
+  private var isFinished = false
+
   func wait(for interval: TimeInterval) async throws {
-    try await Task.sleep(for: .milliseconds(10))
+    if isFinished { throw CancellationError() }
+    try await withCheckedThrowingContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func waitUntilScheduled() async {
+    while waiters.isEmpty {
+      await Task.yield()
+    }
+  }
+
+  func tick() {
+    waiters.removeFirst().resume()
+  }
+
+  func finish() {
+    isFinished = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending {
+      waiter.resume(throwing: CancellationError())
+    }
   }
 }
 
@@ -60,5 +97,11 @@ private actor RecoveringLivePreviewTranscriber {
       words: [],
       confidence: 1
     )
+  }
+
+  func waitUntilCallCount(_ expected: Int) async {
+    while callCount < expected {
+      await Task.yield()
+    }
   }
 }

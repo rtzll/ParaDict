@@ -78,6 +78,10 @@ actor LivePreviewSession {
     chunkSource.send(data)
   }
 
+  func accept(_ data: Data) {
+    append(chunk: data)
+  }
+
   func start(
     models: AsrModels,
     inputSampleRate: Double,
