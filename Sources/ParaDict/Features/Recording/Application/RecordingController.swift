@@ -18,7 +18,7 @@ final class RecordingController: Sendable {
   private var streamingTranscriptAccumulator = StreamingTranscriptAccumulator()
   var partialTranscript = ""
   var overlayStatus: OverlayStatus?
-  var overlayHint: OverlayHint? { recordingSession.overlayHint }
+  var overlayHint: OverlayHint?
 
   let maxRecordingDuration: TimeInterval = 600.0
   var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }
@@ -106,12 +106,14 @@ final class RecordingController: Sendable {
 
   var presentationSnapshot: RecordingPresentationSnapshot {
     RecordingPresentationSnapshot(
-      state: displayState,
-      duration: recorder.currentDuration,
-      meterLevel: recorder.meterLevel,
-      partialTranscript: partialTranscript,
-      overlayStatus: overlayStatus,
-      overlayHint: overlayHint,
+      overlay: OverlaySnapshot(
+        state: displayState,
+        duration: recorder.currentDuration,
+        meterLevel: recorder.meterLevel,
+        partialTranscript: partialTranscript,
+        status: overlayStatus,
+        hint: overlayHint
+      ),
       modelReadiness: modelReadiness.menuPresentation,
       audioDevice: AudioDeviceSnapshot(
         inputMode: deviceManager.inputMode,
@@ -125,15 +127,7 @@ final class RecordingController: Sendable {
   }
 
   var overlaySnapshot: OverlaySnapshot {
-    let presentation = presentationSnapshot
-    return OverlaySnapshot(
-      state: presentation.state,
-      duration: presentation.duration,
-      meterLevel: presentation.meterLevel,
-      partialTranscript: presentation.partialTranscript,
-      status: presentation.overlayStatus,
-      hint: presentation.overlayHint
-    )
+    presentationSnapshot.overlay
   }
 
   func selectDevice(_ device: AudioInputDevice) {
@@ -250,6 +244,8 @@ final class RecordingController: Sendable {
       Task { [weak self] in
         await self?.transcribe(capture)
       }
+    case .overlayHintChanged(let hint):
+      overlayHint = hint
     }
   }
 

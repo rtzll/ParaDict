@@ -5,6 +5,7 @@ enum RecordingSessionFlowEvent: Sendable {
   case recordingEnded
   case previewUpdate(StreamingPreviewUpdate)
   case transcriptionRequested(CompletedRecordingCapture)
+  case overlayHintChanged(OverlayHint?)
 }
 
 @MainActor
@@ -53,7 +54,9 @@ final class RecordingSession: Sendable {
     clearOverlayStatus: @escaping @MainActor () -> Void,
     callbacks: Callbacks
   ) {
-    let sessionRuntime = RecordingSessionRuntime()
+    let sessionRuntime = RecordingSessionRuntime { hint in
+      callbacks.handleEvent(.overlayHintChanged(hint))
+    }
     let capturePreparationWorkflow = RecordingCapturePreparationWorkflow(
       deviceResolver: deviceManager,
       modelProvider: transcriptionProvider
@@ -85,7 +88,6 @@ final class RecordingSession: Sendable {
   }
 
   var state: RecordingSessionState { sessionRuntime.recordingState }
-  var overlayHint: OverlayHint? { sessionRuntime.overlayHint }
 
   func handleCancelShortcut() {
     guard state == .recording else { return }

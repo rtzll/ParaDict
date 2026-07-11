@@ -59,8 +59,8 @@ final class MenuBarViewModel: Sendable {
   var snapshot: MenuBarSnapshot {
     let recording = recordingController.presentationSnapshot
     return MenuBarSnapshot(
-      recordingState: recording.state,
-      currentDuration: recording.duration,
+      recordingState: recording.overlay.state,
+      currentDuration: recording.overlay.duration,
       modelReadiness: recording.modelReadiness,
       allPermissionsGranted: permissions.allGranted,
       accessibilityGranted: permissions.accessibilityGranted,

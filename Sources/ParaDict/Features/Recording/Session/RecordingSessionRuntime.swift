@@ -34,9 +34,14 @@ final class RecordingSessionRuntime: Sendable {
   private let captureTransitionGate = CaptureTransitionGate()
   private var cancelShortcutConfirmationContext: CancelShortcutConfirmationContext?
   private let cancelShortcutConfirmationWindow: TimeInterval
+  private let onOverlayHintChange: @MainActor (OverlayHint?) -> Void
 
-  init(cancelShortcutConfirmationWindow: TimeInterval = 1.5) {
+  init(
+    cancelShortcutConfirmationWindow: TimeInterval = 1.5,
+    onOverlayHintChange: @escaping @MainActor (OverlayHint?) -> Void = { _ in }
+  ) {
     self.cancelShortcutConfirmationWindow = cancelShortcutConfirmationWindow
+    self.onOverlayHintChange = onOverlayHintChange
   }
 
   var recordingState: RecordingSessionState { sessionStateMachine.state }
@@ -129,11 +134,14 @@ final class RecordingSessionRuntime: Sendable {
       self.clearPendingCancelShortcut()
     }
     cancelShortcutConfirmationContext = CancelShortcutConfirmationContext(hint: hint, task: task)
+    onOverlayHintChange(hint)
   }
 
   func clearPendingCancelShortcut() {
+    guard cancelShortcutConfirmationContext != nil else { return }
     cancelShortcutConfirmationContext?.task.cancel()
     cancelShortcutConfirmationContext = nil
+    onOverlayHintChange(nil)
   }
 
   #if DEBUG

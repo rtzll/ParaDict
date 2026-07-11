@@ -26,17 +26,6 @@ struct AudioDeviceSnapshot: Sendable {
   let availableDevices: [AudioInputDevice]
 }
 
-struct RecordingPresentationSnapshot: Sendable {
-  let state: RecordingState
-  let duration: TimeInterval
-  let meterLevel: Double
-  let partialTranscript: String
-  let overlayStatus: OverlayStatus?
-  let overlayHint: OverlayHint?
-  let modelReadiness: ModelReadinessMenuPresentation
-  let audioDevice: AudioDeviceSnapshot
-}
-
 struct OverlaySnapshot: Equatable, Sendable {
   let state: RecordingState
   let duration: TimeInterval
@@ -44,6 +33,12 @@ struct OverlaySnapshot: Equatable, Sendable {
   let partialTranscript: String
   let status: OverlayStatus?
   let hint: OverlayHint?
+}
+
+struct RecordingPresentationSnapshot: Sendable {
+  let overlay: OverlaySnapshot
+  let modelReadiness: ModelReadinessMenuPresentation
+  let audioDevice: AudioDeviceSnapshot
 }
 
 /// Loads the ASR model and turns a recorded audio file into text.

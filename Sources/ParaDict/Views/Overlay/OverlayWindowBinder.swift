@@ -1,6 +1,6 @@
 import AppKit
 
-/// Drives the cursor-anchored overlay window from the overlay view model.
+/// Drives the cursor-anchored overlay window from recording presentation state.
 /// Re-registers Observation tracking after every change so the overlay
 /// stays in sync without an explicit subscription.
 @MainActor
