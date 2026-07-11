@@ -31,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       recordingController: container.recordingController
     )
     overlayBinder = OverlayWindowBinder(
-      viewModel: container.overlayViewModel,
+      recordingController: container.recordingController,
       windowController: overlayWindowController
     )
     iconBinder.start()

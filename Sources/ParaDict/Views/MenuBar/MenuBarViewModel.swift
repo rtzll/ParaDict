@@ -57,19 +57,20 @@ final class MenuBarViewModel: Sendable {
   }
 
   var snapshot: MenuBarSnapshot {
-    MenuBarSnapshot(
-      recordingState: recordingController.displayState,
-      currentDuration: recordingController.recorder.currentDuration,
-      modelReadiness: recordingController.modelReadinessPresentation,
+    let recording = recordingController.presentationSnapshot
+    return MenuBarSnapshot(
+      recordingState: recording.state,
+      currentDuration: recording.duration,
+      modelReadiness: recording.modelReadiness,
       allPermissionsGranted: permissions.allGranted,
       accessibilityGranted: permissions.accessibilityGranted,
       microphoneGranted: permissions.microphoneGranted,
-      inputMode: recordingController.deviceManager.inputMode,
-      selectedDeviceUID: recordingController.deviceManager.selectedDeviceUID,
-      systemDefaultDeviceName: recordingController.deviceManager.systemDefaultDeviceName,
-      effectiveDeviceName: recordingController.deviceManager.effectiveDeviceName,
-      isSelectedDeviceAvailable: recordingController.deviceManager.isSelectedDeviceAvailable,
-      availableDevices: recordingController.deviceManager.availableDevices,
+      inputMode: recording.audioDevice.inputMode,
+      selectedDeviceUID: recording.audioDevice.selectedDeviceUID,
+      systemDefaultDeviceName: recording.audioDevice.systemDefaultDeviceName,
+      effectiveDeviceName: recording.audioDevice.effectiveDeviceName,
+      isSelectedDeviceAvailable: recording.audioDevice.isSelectedDeviceAvailable,
+      availableDevices: recording.audioDevice.availableDevices,
       recentHistoryItems: recordingHistory.recentHistoryItems,
       statistics: recordingHistory.statistics,
       toggleRecordingShortcut: CustomShortcutStorage.get(.toggleRecording)
@@ -77,11 +78,11 @@ final class MenuBarViewModel: Sendable {
   }
 
   func selectDevice(_ device: AudioInputDevice) {
-    recordingController.deviceManager.selectDevice(device)
+    recordingController.selectDevice(device)
   }
 
   func selectSystemDefaultMicrophone() {
-    recordingController.deviceManager.selectSystemDefault()
+    recordingController.selectSystemDefaultMicrophone()
   }
 
   func updateToggleRecordingShortcut(_ shortcut: CustomShortcut?) {

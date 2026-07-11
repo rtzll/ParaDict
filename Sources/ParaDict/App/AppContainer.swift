@@ -4,7 +4,6 @@ import AppKit
 final class AppContainer {
   let recordingController: RecordingController
   let menuBarViewModel: MenuBarViewModel
-  let overlayViewModel: OverlayViewModel
   let hotkeyRouter: HotkeyRouter
   let bootstrap: AppBootstrap
 
@@ -44,7 +43,6 @@ final class AppContainer {
       pasteboard: pasteboard,
       hotkeyRouter: hotkeyRouter
     )
-    overlayViewModel = OverlayViewModel(recordingController: recordingController)
     self.hotkeyRouter = hotkeyRouter
     bootstrap = AppBootstrap(
       recordingController: recordingController,

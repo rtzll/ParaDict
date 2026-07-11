@@ -17,6 +17,35 @@ struct OverlayHint: Sendable, Equatable {
   let message: String
 }
 
+struct AudioDeviceSnapshot: Sendable {
+  let inputMode: MicInputMode
+  let selectedDeviceUID: String?
+  let systemDefaultDeviceName: String
+  let effectiveDeviceName: String
+  let isSelectedDeviceAvailable: Bool
+  let availableDevices: [AudioInputDevice]
+}
+
+struct RecordingPresentationSnapshot: Sendable {
+  let state: RecordingState
+  let duration: TimeInterval
+  let meterLevel: Double
+  let partialTranscript: String
+  let overlayStatus: OverlayStatus?
+  let overlayHint: OverlayHint?
+  let modelReadiness: ModelReadinessMenuPresentation
+  let audioDevice: AudioDeviceSnapshot
+}
+
+struct OverlaySnapshot: Equatable, Sendable {
+  let state: RecordingState
+  let duration: TimeInterval
+  let meterLevel: Double
+  let partialTranscript: String
+  let status: OverlayStatus?
+  let hint: OverlayHint?
+}
+
 /// Loads the ASR model and turns a recorded audio file into text.
 /// Default conformer: `ParakeetProvider`.
 @MainActor

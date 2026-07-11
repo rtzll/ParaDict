@@ -104,6 +104,46 @@ final class RecordingController: Sendable {
     modelReadiness.menuPresentation
   }
 
+  var presentationSnapshot: RecordingPresentationSnapshot {
+    RecordingPresentationSnapshot(
+      state: displayState,
+      duration: recorder.currentDuration,
+      meterLevel: recorder.meterLevel,
+      partialTranscript: partialTranscript,
+      overlayStatus: overlayStatus,
+      overlayHint: overlayHint,
+      modelReadiness: modelReadiness.menuPresentation,
+      audioDevice: AudioDeviceSnapshot(
+        inputMode: deviceManager.inputMode,
+        selectedDeviceUID: deviceManager.selectedDeviceUID,
+        systemDefaultDeviceName: deviceManager.systemDefaultDeviceName,
+        effectiveDeviceName: deviceManager.effectiveDeviceName,
+        isSelectedDeviceAvailable: deviceManager.isSelectedDeviceAvailable,
+        availableDevices: deviceManager.availableDevices
+      )
+    )
+  }
+
+  var overlaySnapshot: OverlaySnapshot {
+    let presentation = presentationSnapshot
+    return OverlaySnapshot(
+      state: presentation.state,
+      duration: presentation.duration,
+      meterLevel: presentation.meterLevel,
+      partialTranscript: presentation.partialTranscript,
+      status: presentation.overlayStatus,
+      hint: presentation.overlayHint
+    )
+  }
+
+  func selectDevice(_ device: AudioInputDevice) {
+    deviceManager.selectDevice(device)
+  }
+
+  func selectSystemDefaultMicrophone() {
+    deviceManager.selectSystemDefault()
+  }
+
   func preloadModel() {
     modelReadiness.preload()
   }
