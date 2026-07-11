@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 struct RecordingTranscriptionWorkflowTests {
-  @Test func successfulTranscriptionCopiesPersistsAndTracksAnalytics() async throws {
+  @Test func successfulTranscriptionCopiesAndPersistsRecording() async throws {
     let provider = TestTranscriptionProvider()
     provider.result = TranscriptionResult(
       text: "hello world",
@@ -16,12 +16,10 @@ struct RecordingTranscriptionWorkflowTests {
       model: "test"
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
 
@@ -36,11 +34,9 @@ struct RecordingTranscriptionWorkflowTests {
     #expect(pasteboard.copiedTexts == ["hello world"])
     #expect(recordings.completedRecordings.count == 1)
     #expect(recordings.failedRecordings.isEmpty)
-    #expect(analytics.calls.count == 1)
-    #expect(analytics.calls[0].wordCount == 2)
   }
 
-  @Test func emptyTranscriptionReturnsEmptyWithoutSideEffects() async throws {
+  @Test func emptyTranscriptionDiscardsCapturedAudio() async throws {
     let provider = TestTranscriptionProvider()
     provider.result = TranscriptionResult(
       text: "",
@@ -50,12 +46,10 @@ struct RecordingTranscriptionWorkflowTests {
       model: "test"
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
 
@@ -70,7 +64,7 @@ struct RecordingTranscriptionWorkflowTests {
     #expect(pasteboard.copiedTexts.isEmpty)
     #expect(recordings.completedRecordings.isEmpty)
     #expect(recordings.failedRecordings.isEmpty)
-    #expect(analytics.calls.isEmpty)
+    #expect(recordings.discardedAudioURLs.count == 1)
   }
 
   @Test func failedTranscriptionPersistsFailedRecording() async throws {
@@ -81,12 +75,10 @@ struct RecordingTranscriptionWorkflowTests {
       userInfo: [NSLocalizedDescriptionKey: "transcriber exploded"]
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
 
@@ -102,7 +94,6 @@ struct RecordingTranscriptionWorkflowTests {
     #expect(recordings.completedRecordings.isEmpty)
     #expect(recordings.failedRecordings.count == 1)
     #expect(recordings.failedRecordings[0].id == "recording-failure")
-    #expect(analytics.calls.isEmpty)
   }
 
   @Test func persistenceFailureDowngradesToFailedRecording() async throws {
@@ -120,12 +111,10 @@ struct RecordingTranscriptionWorkflowTests {
       code: 9,
       userInfo: [NSLocalizedDescriptionKey: "save failed"]
     )
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let workflow = RecordingTranscriptionWorkflow(
       provider: provider,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
 
@@ -141,7 +130,6 @@ struct RecordingTranscriptionWorkflowTests {
     #expect(recordings.completedRecordings.isEmpty)
     #expect(recordings.failedRecordings.count == 1)
     #expect(recordings.failedRecordings[0].id == "recording-save-error")
-    #expect(analytics.calls.isEmpty)
   }
 
   private func makeCapture(recordingId: String, fileName: String, fileSize: Int) throws

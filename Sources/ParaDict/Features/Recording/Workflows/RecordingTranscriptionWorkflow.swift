@@ -9,19 +9,16 @@ enum RecordingTranscriptionOutcome: Equatable, Sendable {
 @MainActor
 final class RecordingTranscriptionWorkflow: Sendable {
   private let provider: TranscriptionProviding
-  private let recordingPersistence: RecordingPersisting
-  private let analyticsRecording: AnalyticsRecording
+  private let recordingHistory: RecordingHistoryWriting
   private let pasteboardWriter: PasteboardWriting
 
   init(
     provider: TranscriptionProviding,
-    recordingPersistence: RecordingPersisting,
-    analyticsRecording: AnalyticsRecording,
+    recordingHistory: RecordingHistoryWriting,
     pasteboardWriter: PasteboardWriting
   ) {
     self.provider = provider
-    self.recordingPersistence = recordingPersistence
-    self.analyticsRecording = analyticsRecording
+    self.recordingHistory = recordingHistory
     self.pasteboardWriter = pasteboardWriter
   }
 
@@ -30,6 +27,7 @@ final class RecordingTranscriptionWorkflow: Sendable {
       let result = try await provider.transcribe(audioURL: capture.audioURL)
 
       guard !result.text.isEmpty else {
+        await recordingHistory.discardCapture(at: capture.audioURL)
         return .empty
       }
 
@@ -44,14 +42,10 @@ final class RecordingTranscriptionWorkflow: Sendable {
         inputDeviceName: capture.inputDeviceName
       )
 
-      try await recordingPersistence.saveWithExistingAudio(recording)
-      await analyticsRecording.record(
-        duration: capture.duration,
-        wordCount: result.text.split(separator: " ").count
-      )
+      try await recordingHistory.saveWithExistingAudio(recording)
       return .succeeded
     } catch {
-      try? await recordingPersistence.saveFailedRecording(
+      try? await recordingHistory.saveFailedRecording(
         Recording.failed(
           id: capture.recordingId,
           duration: capture.duration,

@@ -64,11 +64,12 @@ final class TestTranscriptionProvider: TranscriptionProviding, @unchecked Sendab
 }
 
 @MainActor
-final class TestRecordingPersistence: RecordingPersisting, @unchecked Sendable {
+final class TestRecordingPersistence: RecordingHistoryWriting, @unchecked Sendable {
   var completedSaveError: Error?
   var failedSaveError: Error?
   private(set) var completedRecordings: [Recording] = []
   private(set) var failedRecordings: [Recording] = []
+  private(set) var discardedAudioURLs: [URL] = []
 
   func saveWithExistingAudio(_ recording: Recording) async throws {
     if let completedSaveError {
@@ -83,19 +84,9 @@ final class TestRecordingPersistence: RecordingPersisting, @unchecked Sendable {
     }
     failedRecordings.append(recording)
   }
-}
 
-@MainActor
-final class TestAnalyticsRecorder: AnalyticsRecording, @unchecked Sendable {
-  struct Call {
-    let duration: TimeInterval
-    let wordCount: Int
-  }
-
-  private(set) var calls: [Call] = []
-
-  func record(duration: TimeInterval, wordCount: Int) async {
-    calls.append(Call(duration: duration, wordCount: wordCount))
+  func discardCapture(at audioURL: URL) async {
+    discardedAudioURLs.append(audioURL)
   }
 }
 

@@ -5,40 +5,31 @@ private let bootstrapLog = Logger(subsystem: Logger.subsystem, category: "AppBoo
 @MainActor
 final class AppBootstrap {
   private let recordingController: RecordingController
-  private let recordingStore: RecordingStore
-  private let analyticsStore: AnalyticsStore
+  private let recordingHistory: RecordingHistory
   private let permissions: PermissionsManager
   private let hotkeyManager: HotkeyManager
 
   init(
     recordingController: RecordingController,
-    recordingStore: RecordingStore,
-    analyticsStore: AnalyticsStore,
+    recordingHistory: RecordingHistory,
     permissions: PermissionsManager,
     hotkeyManager: HotkeyManager
   ) {
     self.recordingController = recordingController
-    self.recordingStore = recordingStore
-    self.analyticsStore = analyticsStore
+    self.recordingHistory = recordingHistory
     self.permissions = permissions
     self.hotkeyManager = hotkeyManager
   }
 
   func start() async {
     do {
-      try await recordingStore.loadAll()
+      try await recordingHistory.loadAll()
     } catch {
       bootstrapLog.error(
         "Failed to load recordings; continuing with empty in-memory history: \(error.localizedDescription)"
       )
     }
-    await recordingStore.performRetention()
-
-    let analyticsExisted = await analyticsStore.load()
-    if !analyticsExisted {
-      bootstrapLog.info("Analytics store missing or unreadable; rebuilding from recordings")
-      await analyticsStore.seedFromRecordings(recordingStore.recordings)
-    }
+    await recordingHistory.performRetention()
 
     permissions.refresh()
 

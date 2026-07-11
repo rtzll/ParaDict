@@ -27,19 +27,13 @@ protocol TranscriptionProviding: AnyObject {
   func transcribe(audioURL: URL) async throws -> TranscriptionResult
 }
 
-/// Durable storage for completed and failed recordings.
-/// Default conformer: `RecordingStore`.
+/// Durable history for completed and failed recordings.
+/// Default conformer: `RecordingHistory`.
 @MainActor
-protocol RecordingPersisting: AnyObject {
+protocol RecordingHistoryWriting: AnyObject {
   func saveWithExistingAudio(_ recording: Recording) async throws
   func saveFailedRecording(_ recording: Recording) async throws
-}
-
-/// Aggregates per-recording metrics (total duration, word counts) for the
-/// menu bar stats row. Default conformer: `AnalyticsStore`.
-@MainActor
-protocol AnalyticsRecording: AnyObject {
-  func record(duration: TimeInterval, wordCount: Int) async
+  func discardCapture(at audioURL: URL) async
 }
 
 /// Writes transcribed text to the system pasteboard and triggers a paste
@@ -57,6 +51,5 @@ struct CompletedRecordingCapture: Sendable {
 }
 
 extension ParakeetProvider: TranscriptionProviding {}
-extension RecordingStore: RecordingPersisting {}
-extension AnalyticsStore: AnalyticsRecording {}
+extension RecordingHistory: RecordingHistoryWriting {}
 extension PasteboardService: PasteboardWriting {}

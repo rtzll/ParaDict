@@ -13,8 +13,7 @@ final class AppContainer {
     let recorder = AudioRecorder()
     let deviceManager = AudioDeviceManager()
     let mediaPlayback = MediaPlaybackController()
-    let recordingStore = RecordingStore()
-    let analyticsStore = AnalyticsStore()
+    let recordingHistory = RecordingHistory()
     let permissions = PermissionsManager()
     let pasteboard = PasteboardService()
     let sessionRuntime = RecordingSessionRuntime()
@@ -26,8 +25,7 @@ final class AppContainer {
       sessionRuntime: sessionRuntime,
       toast: toast,
       transcriptionProvider: ParakeetProvider(),
-      recordingPersistence: recordingStore,
-      analyticsRecording: analyticsStore,
+      recordingHistory: recordingHistory,
       pasteboardWriter: pasteboard
     )
 
@@ -38,8 +36,7 @@ final class AppContainer {
     self.recordingController = recordingController
     menuBarViewModel = MenuBarViewModel(
       recordingController: recordingController,
-      recordingStore: recordingStore,
-      analyticsStore: analyticsStore,
+      recordingHistory: recordingHistory,
       permissions: permissions,
       pasteboard: pasteboard
     )
@@ -48,8 +45,7 @@ final class AppContainer {
     self.hotkeyDelegate = hotkeyDelegate
     bootstrap = AppBootstrap(
       recordingController: recordingController,
-      recordingStore: recordingStore,
-      analyticsStore: analyticsStore,
+      recordingHistory: recordingHistory,
       permissions: permissions,
       hotkeyManager: hotkeyManager
     )

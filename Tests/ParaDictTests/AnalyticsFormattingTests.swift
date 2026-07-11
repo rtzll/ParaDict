@@ -17,7 +17,7 @@ struct AnalyticsFormattingTests {
       (10_000_000, "10M"),
     ] as [(Int, String)])
   func compactNumber(value: Int, expected: String) {
-    #expect(AnalyticsStore.compactNumber(value) == expected)
+    #expect(RecordingStatistics.compactNumber(value) == expected)
   }
 
   @Test(
@@ -32,7 +32,7 @@ struct AnalyticsFormattingTests {
       (90000, "1d 1h"),
     ] as [(Int, String)])
   func formatDuration(seconds: Int, expected: String) {
-    #expect(AnalyticsStore.formatDuration(seconds) == expected)
+    #expect(RecordingStatistics.formatDuration(seconds) == expected)
   }
 
   @Test(
@@ -43,48 +43,7 @@ struct AnalyticsFormattingTests {
       (0, 120.0, 0),
     ] as [(Int, Double, Int)])
   func calculateWPM(words: Int, duration: Double, expected: Int) {
-    #expect(AnalyticsStore.calculateWPM(totalWords: words, totalDuration: duration) == expected)
-  }
-
-  @MainActor
-  @Test func recordCreatesParentDirectoryAndPersistsTotals() async throws {
-    let tempRoot = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let fileURL = tempRoot.appendingPathComponent("nested/analytics.json")
-    let store = AnalyticsStore(fileURL: fileURL)
-
-    await store.record(duration: 75, wordCount: 18)
-
-    #expect(FileManager.default.fileExists(atPath: fileURL.path))
-
-    let reloaded = AnalyticsStore(fileURL: fileURL)
-    #expect(await reloaded.load())
     #expect(
-      reloaded.totals
-        == AnalyticsStore.Totals(
-          totalRecordings: 1,
-          totalDuration: 75,
-          totalWords: 18
-        )
-    )
-
-    try? FileManager.default.removeItem(at: tempRoot)
-  }
-
-  @MainActor
-  @Test func loadReturnsFalseWhenFileIsMissingButCreatesParentDirectory() async throws {
-    let tempRoot = FileManager.default.temporaryDirectory
-      .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let fileURL = tempRoot.appendingPathComponent("nested/analytics.json")
-    let store = AnalyticsStore(fileURL: fileURL)
-
-    #expect(!(await store.load()))
-    #expect(
-      FileManager.default.fileExists(
-        atPath: fileURL.deletingLastPathComponent().path
-      )
-    )
-
-    try? FileManager.default.removeItem(at: tempRoot)
+      RecordingStatistics.calculateWPM(totalWords: words, totalDuration: duration) == expected)
   }
 }

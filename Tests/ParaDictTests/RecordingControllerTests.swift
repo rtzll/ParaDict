@@ -14,8 +14,7 @@ struct RecordingControllerTests {
       recorder: recorder,
       deviceManager: deviceManager,
       transcriptionProvider: transcription,
-      recordingPersistence: TestRecordingPersistence(),
-      analyticsRecording: TestAnalyticsRecorder(),
+      recordingHistory: TestRecordingPersistence(),
       pasteboardWriter: TestPasteboardWriter()
     )
 
@@ -170,7 +169,7 @@ struct RecordingControllerTests {
     #expect(controller.overlayStatus?.title == "Recording Canceled")
   }
 
-  @Test func transcribeSuccessfulResultCopiesTextSavesRecordingAndTracksAnalytics() async throws {
+  @Test func transcribeSuccessfulResultCopiesTextAndSavesRecording() async throws {
     let toast = TestToastPresenter()
     let transcription = TestTranscriptionProvider()
     transcription.result = TranscriptionResult(
@@ -183,13 +182,11 @@ struct RecordingControllerTests {
       model: "parakeet-test"
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
     let audioURL = try makeAudioFile(named: "success.wav", size: 8)
@@ -213,9 +210,6 @@ struct RecordingControllerTests {
     #expect(controller.overlayStatus == nil)
     #expect(toast.errors.isEmpty)
     #expect(pasteboard.copiedTexts == ["hello world"])
-    #expect(analytics.calls.count == 1)
-    #expect(analytics.calls[0].duration == 2.5)
-    #expect(analytics.calls[0].wordCount == 2)
     #expect(recordings.completedRecordings.count == 1)
     #expect(recordings.failedRecordings.isEmpty)
     #expect(recordings.completedRecordings[0].id == "recording-123")
@@ -234,13 +228,11 @@ struct RecordingControllerTests {
       model: "parakeet-test"
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
     let audioURL = try makeAudioFile(named: "empty.wav", size: 4)
@@ -266,7 +258,6 @@ struct RecordingControllerTests {
     #expect(controller.overlayStatus?.message == "No speech detected in recording.")
     #expect(toast.errors.isEmpty)
     #expect(pasteboard.copiedTexts.isEmpty)
-    #expect(analytics.calls.isEmpty)
     #expect(recordings.completedRecordings.isEmpty)
     #expect(recordings.failedRecordings.isEmpty)
   }
@@ -280,13 +271,11 @@ struct RecordingControllerTests {
       userInfo: [NSLocalizedDescriptionKey: "transcriber exploded"]
     )
     let recordings = TestRecordingPersistence()
-    let analytics = TestAnalyticsRecorder()
     let pasteboard = TestPasteboardWriter()
     let controller = RecordingController(
       toast: toast,
       transcriptionProvider: transcription,
-      recordingPersistence: recordings,
-      analyticsRecording: analytics,
+      recordingHistory: recordings,
       pasteboardWriter: pasteboard
     )
     let audioURL = try makeAudioFile(named: "failure.wav", size: 6)
@@ -312,7 +301,6 @@ struct RecordingControllerTests {
     #expect(controller.overlayStatus?.message == "transcriber exploded")
     #expect(toast.errors.isEmpty)
     #expect(pasteboard.copiedTexts.isEmpty)
-    #expect(analytics.calls.isEmpty)
     #expect(recordings.completedRecordings.isEmpty)
     #expect(recordings.failedRecordings.count == 1)
     #expect(recordings.failedRecordings[0].id == "recording-failure")
@@ -333,8 +321,7 @@ struct RecordingControllerTests {
     RecordingController(
       toast: toast,
       transcriptionProvider: transcriptionProvider,
-      recordingPersistence: TestRecordingPersistence(),
-      analyticsRecording: TestAnalyticsRecorder(),
+      recordingHistory: TestRecordingPersistence(),
       pasteboardWriter: TestPasteboardWriter()
     )
   }

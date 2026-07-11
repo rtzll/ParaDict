@@ -12,8 +12,7 @@ final class RecordingController: Sendable {
   private let mediaPlayback: MediaPlaybackController
   private let transcriptionProvider: TranscriptionProviding
   private let modelReadiness: RecordingModelReadinessChecking
-  private let recordingPersistence: RecordingPersisting
-  private let analyticsRecording: AnalyticsRecording
+  private let recordingHistory: RecordingHistoryWriting
   private let pasteboardWriter: PasteboardWriting
   private let sessionRuntime: RecordingSessionRuntime
   @ObservationIgnored
@@ -65,8 +64,7 @@ final class RecordingController: Sendable {
     toast: ToastPresenting = ToastWindowController.shared,
     transcriptionProvider: TranscriptionProviding,
     modelReadiness: RecordingModelReadinessChecking? = nil,
-    recordingPersistence: RecordingPersisting,
-    analyticsRecording: AnalyticsRecording,
+    recordingHistory: RecordingHistoryWriting,
     pasteboardWriter: PasteboardWriting
   ) {
     self.recorder = recorder
@@ -77,8 +75,7 @@ final class RecordingController: Sendable {
     self.transcriptionProvider = transcriptionProvider
     self.modelReadiness =
       modelReadiness ?? TranscriptionModelReadiness(provider: transcriptionProvider)
-    self.recordingPersistence = recordingPersistence
-    self.analyticsRecording = analyticsRecording
+    self.recordingHistory = recordingHistory
     self.pasteboardWriter = pasteboardWriter
     recorder.onRecordingInterrupted = { [weak self] message in
       self?.handleRecordingInterrupted(message: message)
@@ -88,8 +85,7 @@ final class RecordingController: Sendable {
     }
     transcriptionWorkflow = RecordingTranscriptionWorkflow(
       provider: transcriptionProvider,
-      recordingPersistence: recordingPersistence,
-      analyticsRecording: analyticsRecording,
+      recordingHistory: recordingHistory,
       pasteboardWriter: pasteboardWriter
     )
     capturePreparationWorkflow = RecordingCapturePreparationWorkflow(
