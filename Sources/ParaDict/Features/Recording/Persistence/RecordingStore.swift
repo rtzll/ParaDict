@@ -158,8 +158,6 @@ final class RecordingHistory: Sendable {
   private(set) var recordings: [Recording]
 
   private let fileStore: RecordingFileStore
-  private let logger = Logger(subsystem: Logger.subsystem, category: "RecordingStore")
-  private let maxRecordings = 50
   private let wavRetentionInterval: TimeInterval = 15 * 60  // 15 minutes
 
   init(
@@ -219,20 +217,6 @@ final class RecordingHistory: Sendable {
   // MARK: - Retention
 
   func performRetention() async {
-    if recordings.count > maxRecordings {
-      let excess = Array(recordings[maxRecordings...])
-      recordings = Array(recordings.prefix(maxRecordings))
-      for recording in excess {
-        do {
-          try await fileStore.delete(recording)
-        } catch {
-          logger.warning(
-            "Failed to delete recording during retention for \(recording.id, privacy: .public): \(error.localizedDescription)"
-          )
-        }
-      }
-    }
-
     let cutoff = Date().addingTimeInterval(-wavRetentionInterval)
     for recording in recordings where recording.createdAt < cutoff && recording.hasAudioFile {
       await fileStore.removeAudioFile(at: recording.audioURL)
