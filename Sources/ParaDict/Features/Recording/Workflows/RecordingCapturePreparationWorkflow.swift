@@ -10,7 +10,7 @@ struct PendingRecordingSession {
   let recordingId: String
   let resolvedDevice: ResolvedRecordingDevice
   let audioURL: URL
-  let streamingSession: ParakeetStreamingSession
+  let streamingSession: LivePreviewSession
 }
 
 struct RecordingSessionPreparation {
@@ -27,13 +27,13 @@ enum RecordingSessionPreparationOutcome {
 final class RecordingCapturePreparationWorkflow: Sendable {
   private let deviceResolver: RecordingDeviceResolving
   private let modelProvider: TranscriptionProviding
-  private let makeStreamingSession: @Sendable () -> ParakeetStreamingSession
+  private let makeStreamingSession: @Sendable () -> LivePreviewSession
 
   init(
     deviceResolver: RecordingDeviceResolving,
     modelProvider: TranscriptionProviding,
-    makeStreamingSession: @escaping @Sendable () -> ParakeetStreamingSession = {
-      ParakeetStreamingSession()
+    makeStreamingSession: @escaping @Sendable () -> LivePreviewSession = {
+      LivePreviewSession()
     }
   ) {
     self.deviceResolver = deviceResolver

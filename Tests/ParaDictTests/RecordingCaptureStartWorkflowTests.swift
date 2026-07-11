@@ -75,7 +75,7 @@ struct RecordingCaptureStartWorkflowTests {
             requestedMode: .systemDefault
           ),
           audioURL: URL(fileURLWithPath: "/tmp/recording-preview-failure.wav"),
-          streamingSession: ParakeetStreamingSession()
+          streamingSession: LivePreviewSession()
         ),
         didFallbackToSystemDefault: false
       ))
@@ -128,7 +128,7 @@ struct RecordingCaptureStartWorkflowTests {
             requestedMode: .systemDefault
           ),
           audioURL: URL(fileURLWithPath: "/tmp/recording-start-failure.wav"),
-          streamingSession: ParakeetStreamingSession()
+          streamingSession: LivePreviewSession()
         ),
         didFallbackToSystemDefault: false
       ))

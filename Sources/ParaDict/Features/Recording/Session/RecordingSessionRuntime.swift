@@ -3,7 +3,7 @@ import Foundation
 private struct ActiveCaptureContext {
   let recordingId: String
   var warningShown = false
-  var streamingSession: ParakeetStreamingSession?
+  var streamingSession: LivePreviewSession?
 }
 
 private struct CancelShortcutConfirmationContext {
@@ -59,13 +59,13 @@ final class RecordingSessionRuntime: Sendable {
     activeCaptureContext = nil
   }
 
-  func setActiveStreamingSession(_ session: ParakeetStreamingSession?) {
+  func setActiveStreamingSession(_ session: LivePreviewSession?) {
     guard var context = activeCaptureContext else { return }
     context.streamingSession = session
     activeCaptureContext = context
   }
 
-  func takeActiveStreamingSession() -> ParakeetStreamingSession? {
+  func takeActiveStreamingSession() -> LivePreviewSession? {
     guard var context = activeCaptureContext else { return nil }
     let session = context.streamingSession
     context.streamingSession = nil

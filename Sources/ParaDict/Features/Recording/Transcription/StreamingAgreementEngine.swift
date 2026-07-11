@@ -45,7 +45,7 @@ struct StreamingAgreementConfig: Sendable {
 /// prefix to "confirmed" once successive passes agree on it. Everything after
 /// the confirmed prefix is treated as a fluid hypothesis that can still change.
 /// Safe to share across isolation boundaries because it is stored as a `var`
-/// property inside `ParakeetStreamingSession` (an actor), which serializes all
+/// property inside `LivePreviewSession` (an actor), which serializes all
 /// access. As a struct with only Sendable stored properties, it conforms to
 /// `Sendable` automatically.
 struct StreamingAgreementEngine: Sendable {

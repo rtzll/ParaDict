@@ -10,7 +10,10 @@ private final class StreamingChunkSource: @unchecked Sendable {
   private let continuation: AsyncStream<Data>.Continuation
 
   init() {
-    let (stream, continuation) = AsyncStream.makeStream(of: Data.self, bufferingPolicy: .unbounded)
+    let (stream, continuation) = AsyncStream.makeStream(
+      of: Data.self,
+      bufferingPolicy: .bufferingNewest(32)
+    )
     self.stream = stream
     self.continuation = continuation
   }
@@ -24,13 +27,37 @@ private final class StreamingChunkSource: @unchecked Sendable {
   }
 }
 
-actor ParakeetStreamingSession {
+protocol LivePreviewClock: Sendable {
+  func wait(for interval: TimeInterval) async throws
+}
+
+struct LivePreviewPassResult: Sendable {
+  let text: String
+  let words: [StreamingWord]
+  let confidence: Float
+}
+
+typealias LivePreviewTranscriptionPass =
+  @Sendable (
+    _ samples: [Float],
+    _ sampleRate: Double,
+    _ timeOffset: TimeInterval
+  ) async throws -> LivePreviewPassResult
+
+private struct SystemLivePreviewClock: LivePreviewClock {
+  func wait(for interval: TimeInterval) async throws {
+    try await Task.sleep(for: .seconds(interval))
+  }
+}
+
+actor LivePreviewSession {
   private let chunkSource = StreamingChunkSource()
   private let agreementConfig = StreamingAgreementConfig()
   private let wordConverter = StreamingTokenWordConverter()
+  private let clock: LivePreviewClock
   private var agreementEngine: StreamingAgreementEngine
 
-  private var manager: AsrManager?
+  private var transcriptionPass: LivePreviewTranscriptionPass?
   private var inputSampleRate: Double = 16_000
   private var chunkPumpTask: Task<Void, Never>?
   private var transcriptionLoopTask: Task<Void, Never>?
@@ -38,7 +65,12 @@ actor ParakeetStreamingSession {
   private var isTranscribing = false
   private var onPreviewUpdate: (@MainActor (StreamingPreviewUpdate) -> Void)?
 
-  init() {
+  init(
+    clock: LivePreviewClock = SystemLivePreviewClock(),
+    transcriptionPass: LivePreviewTranscriptionPass? = nil
+  ) {
+    self.clock = clock
+    self.transcriptionPass = transcriptionPass
     agreementEngine = StreamingAgreementEngine(config: agreementConfig)
   }
 
@@ -54,7 +86,34 @@ actor ParakeetStreamingSession {
     let manager = AsrManager(config: .default)
     try await manager.initialize(models: models)
 
-    self.manager = manager
+    let wordConverter = self.wordConverter
+    transcriptionPass = { samples, sampleRate, timeOffset in
+      guard let buffer = Self.makePCMBuffer(from: samples, sampleRate: sampleRate) else {
+        return LivePreviewPassResult(text: "", words: [], confidence: 0)
+      }
+      let result = try await manager.transcribe(buffer, source: .microphone)
+      let words = wordConverter.words(from: result.tokenTimings ?? [], timeOffset: timeOffset)
+      return LivePreviewPassResult(
+        text: result.text,
+        words: words,
+        confidence: result.confidence
+      )
+    }
+    begin(inputSampleRate: inputSampleRate, onPreviewUpdate: onPreviewUpdate)
+  }
+
+  func startPrepared(
+    inputSampleRate: Double,
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) {
+    precondition(transcriptionPass != nil, "A prepared transcription pass is required")
+    begin(inputSampleRate: inputSampleRate, onPreviewUpdate: onPreviewUpdate)
+  }
+
+  private func begin(
+    inputSampleRate: Double,
+    onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
+  ) {
     self.inputSampleRate = inputSampleRate
     self.onPreviewUpdate = onPreviewUpdate
     self.audioBuffer.reset()
@@ -69,7 +128,11 @@ actor ParakeetStreamingSession {
 
     transcriptionLoopTask = Task {
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(agreementConfig.transcribeIntervalSeconds))
+        do {
+          try await clock.wait(for: agreementConfig.transcribeIntervalSeconds)
+        } catch {
+          return
+        }
         await self.runTranscriptionPass()
       }
     }
@@ -85,7 +148,7 @@ actor ParakeetStreamingSession {
     isTranscribing = false
     onPreviewUpdate = nil
     agreementEngine.reset()
-    manager = nil
+    transcriptionPass = nil
   }
 
   private func append(chunk: Data) {
@@ -94,7 +157,7 @@ actor ParakeetStreamingSession {
 
   private func runTranscriptionPass() async {
     guard !isTranscribing else { return }
-    guard let manager else { return }
+    guard let transcriptionPass else { return }
 
     let absoluteSampleCount = audioBuffer.absoluteSampleCount
     guard
@@ -117,15 +180,15 @@ actor ParakeetStreamingSession {
       return
     }
 
-    guard let buffer = Self.makePCMBuffer(from: window.samples, sampleRate: inputSampleRate) else {
-      return
-    }
-
     do {
-      let result = try await manager.transcribe(buffer, source: .microphone)
+      let result = try await transcriptionPass(
+        window.samples,
+        inputSampleRate,
+        window.timeOffset
+      )
       audioBuffer.markProcessed(upTo: absoluteSampleCount)
 
-      guard let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty else {
+      guard !result.words.isEmpty else {
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {
           await onPreviewUpdate?(.partial(text))
@@ -133,10 +196,10 @@ actor ParakeetStreamingSession {
         return
       }
 
-      let words = wordConverter.words(from: tokenTimings, timeOffset: window.timeOffset)
-      guard !words.isEmpty else { return }
-
-      let agreementResult = agreementEngine.process(words: words, confidence: result.confidence)
+      let agreementResult = agreementEngine.process(
+        words: result.words,
+        confidence: result.confidence
+      )
       if !agreementResult.newlyConfirmedText.isEmpty {
         await onPreviewUpdate?(.committed(agreementResult.newlyConfirmedText))
       }
