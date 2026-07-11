@@ -27,6 +27,7 @@ final class MenuBarViewModel: Sendable {
   private let recordingHistory: RecordingHistory
   private let permissions: PermissionsManager
   private let pasteboard: PasteboardService
+  private let hotkeyRouter: HotkeyRouter
   private let openRecordingsFolderAction: @MainActor () -> Void
   private let quitApplicationAction: @MainActor () -> Void
 
@@ -35,6 +36,7 @@ final class MenuBarViewModel: Sendable {
     recordingHistory: RecordingHistory,
     permissions: PermissionsManager,
     pasteboard: PasteboardService,
+    hotkeyRouter: HotkeyRouter,
     openRecordingsFolderAction: @escaping @MainActor () -> Void = {
       NSWorkspace.shared.selectFile(
         nil,
@@ -49,6 +51,7 @@ final class MenuBarViewModel: Sendable {
     self.recordingHistory = recordingHistory
     self.permissions = permissions
     self.pasteboard = pasteboard
+    self.hotkeyRouter = hotkeyRouter
     self.openRecordingsFolderAction = openRecordingsFolderAction
     self.quitApplicationAction = quitApplicationAction
   }
@@ -82,8 +85,7 @@ final class MenuBarViewModel: Sendable {
   }
 
   func updateToggleRecordingShortcut(_ shortcut: CustomShortcut?) {
-    CustomShortcutStorage.set(shortcut, for: .toggleRecording)
-    recordingController.reloadShortcuts()
+    hotkeyRouter.updateShortcut(shortcut, for: .toggleRecording)
   }
 
   func retryModelLoading() {

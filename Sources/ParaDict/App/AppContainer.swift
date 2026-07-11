@@ -5,8 +5,7 @@ final class AppContainer {
   let recordingController: RecordingController
   let menuBarViewModel: MenuBarViewModel
   let overlayViewModel: OverlayViewModel
-  let hotkeyManager: HotkeyManager
-  let hotkeyDelegate: HotkeyDelegateImpl
+  let hotkeyRouter: HotkeyRouter
   let bootstrap: AppBootstrap
 
   init(toast: ToastPresenting = ToastWindowController.shared) {
@@ -27,25 +26,31 @@ final class AppContainer {
       pasteboardWriter: pasteboard
     )
 
-    let hotkeyManager = HotkeyManager()
-    let hotkeyDelegate = HotkeyDelegateImpl(recordingController: recordingController)
-    hotkeyManager.delegate = hotkeyDelegate
+    let hotkeyRouter = HotkeyRouter()
+    hotkeyRouter.onIntent = { [weak recordingController] intent in
+      switch intent {
+      case .toggleRecording:
+        recordingController?.toggleRecording()
+      case .cancelRecording:
+        recordingController?.handleCancelRecordingShortcut()
+      }
+    }
 
     self.recordingController = recordingController
     menuBarViewModel = MenuBarViewModel(
       recordingController: recordingController,
       recordingHistory: recordingHistory,
       permissions: permissions,
-      pasteboard: pasteboard
+      pasteboard: pasteboard,
+      hotkeyRouter: hotkeyRouter
     )
     overlayViewModel = OverlayViewModel(recordingController: recordingController)
-    self.hotkeyManager = hotkeyManager
-    self.hotkeyDelegate = hotkeyDelegate
+    self.hotkeyRouter = hotkeyRouter
     bootstrap = AppBootstrap(
       recordingController: recordingController,
       recordingHistory: recordingHistory,
       permissions: permissions,
-      hotkeyManager: hotkeyManager
+      hotkeyRouter: hotkeyRouter
     )
   }
 }

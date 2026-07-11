@@ -2,10 +2,37 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 
+enum HotkeyIntent: Equatable, Sendable {
+  case toggleRecording
+  case cancelRecording
+}
+
 @MainActor
-protocol HotkeyManagerDelegate: AnyObject {
-  nonisolated func hotkeyDidToggleRecording()
-  nonisolated func hotkeyDidCancelRecording()
+protocol HotkeyMonitoring: AnyObject {
+  func start()
+  func stop()
+  func reloadShortcuts()
+  func onKeyDown(
+    for name: CustomShortcutName,
+    handler: @escaping @Sendable @MainActor () -> Void
+  )
+  func onKeyUp(
+    for name: CustomShortcutName,
+    handler: @escaping @Sendable @MainActor () -> Void
+  )
+  func setEnabledCheck(
+    for name: CustomShortcutName,
+    check: @escaping @Sendable () -> Bool
+  )
+}
+
+@MainActor
+protocol ToggleHotkeyRegistering: AnyObject {
+  func register(
+    shortcut: CustomShortcut,
+    handler: @escaping @Sendable @MainActor () -> Void
+  ) -> Bool
+  func unregister()
 }
 
 /// Thread-safe box for the recording-active flag. Accessed from both the
@@ -52,13 +79,21 @@ private final class ToggleHotkeyRoutingState: @unchecked Sendable {
 }
 
 @MainActor
-final class HotkeyManager {
-  weak var delegate: HotkeyManagerDelegate?
+final class HotkeyRouter {
+  var onIntent: (@MainActor (HotkeyIntent) -> Void)?
 
-  private let shortcutMonitor = CustomShortcutMonitor.shared
-  private let carbonToggleHotkey = CarbonHotkeyRegistrar(id: 1)
+  private let shortcutMonitor: HotkeyMonitoring
+  private let carbonToggleHotkey: ToggleHotkeyRegistering
   private let recordingState = RecordingActiveState()
   private let toggleRoutingState = ToggleHotkeyRoutingState()
+
+  init(
+    monitor: HotkeyMonitoring = CustomShortcutMonitor.shared,
+    toggleRegistrar: ToggleHotkeyRegistering = CarbonHotkeyRegistrar(id: 1)
+  ) {
+    self.shortcutMonitor = monitor
+    self.carbonToggleHotkey = toggleRegistrar
+  }
 
   func start() {
     setupToggleRecording()
@@ -73,9 +108,12 @@ final class HotkeyManager {
     shortcutMonitor.stop()
   }
 
-  func reloadShortcuts() {
+  func updateShortcut(_ shortcut: CustomShortcut?, for name: CustomShortcutName) {
+    CustomShortcutStorage.set(shortcut, for: name)
     shortcutMonitor.reloadShortcuts()
-    registerCarbonToggleShortcut()
+    if name == .toggleRecording {
+      registerCarbonToggleShortcut()
+    }
   }
 
   func recordingDidStart() {
@@ -91,7 +129,7 @@ final class HotkeyManager {
       toggleRoutingState.shouldUseEventTapFallback
     }
     shortcutMonitor.onKeyDown(for: .toggleRecording) { [weak self] in
-      self?.delegate?.hotkeyDidToggleRecording()
+      self?.onIntent?(.toggleRecording)
     }
   }
 
@@ -100,7 +138,7 @@ final class HotkeyManager {
       recordingState.active
     }
     shortcutMonitor.onKeyUp(for: .cancelRecording) { [weak self] in
-      self?.delegate?.hotkeyDidCancelRecording()
+      self?.onIntent?(.cancelRecording)
     }
   }
 
@@ -112,8 +150,11 @@ final class HotkeyManager {
     }
 
     let registered = carbonToggleHotkey.register(shortcut: shortcut) { [weak self] in
-      self?.delegate?.hotkeyDidToggleRecording()
+      self?.onIntent?(.toggleRecording)
     }
     toggleRoutingState.setHandledByCarbon(registered)
   }
 }
+
+extension CustomShortcutMonitor: HotkeyMonitoring {}
+extension CarbonHotkeyRegistrar: ToggleHotkeyRegistering {}

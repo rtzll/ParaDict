@@ -198,10 +198,6 @@ final class RecordingController: Sendable {
     applyStreamingPreviewUpdate(.reset)
   }
 
-  func reloadShortcuts() {
-    CustomShortcutMonitor.shared.reloadShortcuts()
-  }
-
   private func handleSessionFlowEvent(_ event: RecordingSessionFlowEvent) {
     switch event {
     case .recordingStarted:

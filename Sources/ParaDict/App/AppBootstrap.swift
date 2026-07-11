@@ -7,18 +7,18 @@ final class AppBootstrap {
   private let recordingController: RecordingController
   private let recordingHistory: RecordingHistory
   private let permissions: PermissionsManager
-  private let hotkeyManager: HotkeyManager
+  private let hotkeyRouter: HotkeyRouter
 
   init(
     recordingController: RecordingController,
     recordingHistory: RecordingHistory,
     permissions: PermissionsManager,
-    hotkeyManager: HotkeyManager
+    hotkeyRouter: HotkeyRouter
   ) {
     self.recordingController = recordingController
     self.recordingHistory = recordingHistory
     self.permissions = permissions
-    self.hotkeyManager = hotkeyManager
+    self.hotkeyRouter = hotkeyRouter
   }
 
   func start() async {
@@ -42,7 +42,7 @@ final class AppBootstrap {
 
     if permissions.accessibilityGranted {
       bootstrapLog.info("Starting hotkey manager (accessibility already granted)")
-      hotkeyManager.start()
+      hotkeyRouter.start()
     } else {
       permissions.openAccessibilitySettings()
       permissions.startPolling()
@@ -50,17 +50,17 @@ final class AppBootstrap {
   }
 
   private func wireHotkeyLifecycle() {
-    recordingController.onRecordingStarted = { [weak hotkeyManager] in
-      hotkeyManager?.recordingDidStart()
+    recordingController.onRecordingStarted = { [weak hotkeyRouter] in
+      hotkeyRouter?.recordingDidStart()
     }
-    recordingController.onRecordingEnded = { [weak hotkeyManager] in
-      hotkeyManager?.recordingDidEnd()
+    recordingController.onRecordingEnded = { [weak hotkeyRouter] in
+      hotkeyRouter?.recordingDidEnd()
     }
 
-    permissions.onAllGranted = { [weak hotkeyManager] in
+    permissions.onAllGranted = { [weak hotkeyRouter] in
       bootstrapLog.info("All permissions granted — restarting hotkey manager")
-      hotkeyManager?.stop()
-      hotkeyManager?.start()
+      hotkeyRouter?.stop()
+      hotkeyRouter?.start()
     }
   }
 }
