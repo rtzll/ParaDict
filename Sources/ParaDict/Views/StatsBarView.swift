@@ -20,13 +20,13 @@ private struct StatCard: View {
   var body: some View {
     VStack(spacing: 4) {
       Text(label)
-        .font(.system(size: 9, weight: .medium))
+        .font(.caption.weight(.medium))
         .foregroundColor(.secondary)
         .textCase(.uppercase)
         .tracking(0.3)
 
       Text(value)
-        .font(.system(size: 15, weight: .semibold, design: .rounded))
+        .font(.system(.headline, design: .rounded, weight: .semibold))
         .foregroundColor(.primary)
     }
     .frame(maxWidth: .infinity)

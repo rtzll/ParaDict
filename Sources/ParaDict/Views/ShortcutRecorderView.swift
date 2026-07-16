@@ -15,14 +15,14 @@ struct ShortcutRecorderView: View {
       if isRecording {
         Text("Press shortcut...")
           .foregroundColor(.secondary)
-          .font(.system(size: 12))
+          .font(.callout)
       } else if let shortcut {
         Text(shortcut.compactDisplayString)
-          .font(.system(size: 12, weight: .medium, design: .monospaced))
+          .font(.system(.callout, design: .monospaced, weight: .medium))
       } else {
         Text("Not set")
           .foregroundColor(.secondary)
-          .font(.system(size: 12))
+          .font(.callout)
       }
     }
     .padding(.horizontal, 8)

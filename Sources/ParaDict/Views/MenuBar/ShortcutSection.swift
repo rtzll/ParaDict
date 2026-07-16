@@ -26,7 +26,7 @@ struct ShortcutSection: View {
             isEditing = false
           } label: {
             Text("Cancel")
-              .font(.system(size: 11))
+              .font(.caption)
               .foregroundColor(.secondary)
           }
           .buttonStyle(.plain)
@@ -44,17 +44,17 @@ struct ShortcutSection: View {
         } label: {
           HStack(spacing: 8) {
             Text("Toggle Recording")
-              .font(.system(size: 13))
+              .font(.body)
 
             Spacer(minLength: 12)
 
             if let shortcut = viewModel.snapshot.toggleRecordingShortcut {
               Text(shortcut.compactDisplayString)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .font(.system(.callout, design: .monospaced, weight: .medium))
                 .foregroundColor(.secondary)
             } else {
               Text("Not Set")
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundColor(.secondary)
             }
           }

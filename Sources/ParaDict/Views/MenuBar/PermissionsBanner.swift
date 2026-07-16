@@ -44,22 +44,22 @@ private struct PermissionRow: View {
     Button(action: action) {
       HStack(spacing: 8) {
         Image(systemName: icon)
-          .font(.system(size: 12))
+          .font(.caption)
           .foregroundColor(.orange)
           .frame(width: 20)
 
         VStack(alignment: .leading, spacing: 1) {
           Text(label)
-            .font(.system(size: 13, weight: .medium))
+            .font(.body.weight(.medium))
           Text(detail)
-            .font(.system(size: 10))
+            .font(.caption)
             .foregroundColor(.secondary)
         }
 
         Spacer()
 
         Text("Grant")
-          .font(.system(size: 11, weight: .medium))
+          .font(.caption.weight(.medium))
           .foregroundColor(.orange)
       }
       .padding(.horizontal, 10)

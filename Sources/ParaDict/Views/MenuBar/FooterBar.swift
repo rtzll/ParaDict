@@ -46,7 +46,7 @@ private struct FooterButton: View {
           .frame(width: 24, height: 20)
 
         Text(label)
-          .font(.system(size: 9))
+          .font(.caption)
           .foregroundColor(.secondary)
       }
       .frame(maxWidth: .infinity)

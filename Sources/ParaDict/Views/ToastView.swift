@@ -45,11 +45,11 @@ struct ToastView: View {
 
       VStack(alignment: .leading, spacing: 2) {
         Text(toast.title)
-          .font(.system(size: 13, weight: .medium))
+          .font(.body.weight(.medium))
 
         if let message = toast.message {
           Text(message)
-            .font(.system(size: 11))
+            .font(.caption)
             .foregroundColor(.secondary)
         }
       }
@@ -61,7 +61,7 @@ struct ToastView: View {
           onDismiss?()
         } label: {
           Image(systemName: "xmark")
-            .font(.system(size: 10, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .foregroundColor(.secondary)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())

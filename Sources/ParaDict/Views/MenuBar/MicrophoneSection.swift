@@ -14,7 +14,7 @@ struct MicrophoneSection: View {
       } label: {
         HStack(spacing: 8) {
           Text(viewModel.snapshot.effectiveDeviceName)
-            .font(.system(size: 13))
+            .font(.body)
             .lineLimit(1)
             .truncationMode(.tail)
 
@@ -22,11 +22,11 @@ struct MicrophoneSection: View {
 
           if viewModel.snapshot.inputMode == .systemDefault {
             Text("System Default")
-              .font(.system(size: 10))
+              .font(.caption)
               .foregroundColor(.secondary)
           } else if !viewModel.snapshot.isSelectedDeviceAvailable {
             Text("Unavailable")
-              .font(.system(size: 10))
+              .font(.caption)
               .foregroundColor(.orange)
           }
 
@@ -64,7 +64,7 @@ private struct MicrophonePickerView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Input Device")
-        .font(.system(size: 11, weight: .semibold))
+        .font(.caption.weight(.semibold))
         .foregroundColor(.secondary)
         .textCase(.uppercase)
         .tracking(0.5)
@@ -115,12 +115,12 @@ private struct MicPickerRow: View {
       HStack(spacing: 8) {
         VStack(alignment: .leading, spacing: 2) {
           Text(name)
-            .font(.system(size: 13))
+            .font(.body)
             .foregroundColor(.primary)
 
           if let subtitle {
             Text(subtitle)
-              .font(.system(size: 10))
+              .font(.caption)
               .foregroundColor(.secondary)
           }
         }
@@ -129,7 +129,7 @@ private struct MicPickerRow: View {
 
         if isSelected {
           Image(systemName: "checkmark")
-            .font(.system(size: 11, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .foregroundColor(.accentColor)
         }
       }

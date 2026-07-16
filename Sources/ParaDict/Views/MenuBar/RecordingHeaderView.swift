@@ -14,11 +14,11 @@ struct RecordingHeaderView: View {
 
       VStack(alignment: .leading, spacing: 2) {
         Text(presentation.title)
-          .font(.system(size: 13, weight: .medium))
+          .font(.body.weight(.medium))
 
         if let detail = presentation.detail {
           Text(detail)
-            .font(.system(size: 10))
+            .font(.caption)
             .foregroundColor(.secondary)
         }
       }
@@ -27,7 +27,7 @@ struct RecordingHeaderView: View {
 
       if viewModel.snapshot.recordingState.isRecording {
         Text(formatDuration(viewModel.snapshot.currentDuration))
-          .font(.system(size: 11, design: .monospaced))
+          .font(.system(.caption, design: .monospaced))
           .foregroundColor(.secondary)
           .accessibilityLabel("Recording duration")
           .accessibilityValue(formatDuration(viewModel.snapshot.currentDuration))
@@ -44,7 +44,7 @@ struct RecordingHeaderView: View {
           viewModel.retryModelLoading()
         }
         .buttonStyle(.plain)
-        .font(.system(size: 11, weight: .medium))
+        .font(.caption.weight(.medium))
       }
     }
   }

@@ -61,12 +61,12 @@ struct RecordingOverlayView: View {
 
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.system(size: 13, weight: .semibold))
+          .font(.body.weight(.semibold))
           .foregroundStyle(.primary)
 
         HStack(spacing: 8) {
           Text(subtitle)
-            .font(.system(size: 11, weight: .medium, design: subtitleFontDesign))
+            .font(.system(.caption, design: subtitleFontDesign, weight: .medium))
             .foregroundStyle(.secondary)
             .lineLimit(2)
 
@@ -88,7 +88,7 @@ struct RecordingOverlayView: View {
           .accessibilityHidden(true)
 
         Text(title)
-          .font(.system(size: 11, weight: .semibold))
+          .font(.caption.weight(.semibold))
           .foregroundStyle(.secondary)
 
         Spacer(minLength: 8)
@@ -207,7 +207,7 @@ struct RecordingOverlayView: View {
     ScrollViewReader { proxy in
       ScrollView(.vertical, showsIndicators: false) {
         Text(transcriptText)
-          .font(.system(size: 14, weight: .medium))
+          .font(.body.weight(.medium))
           .foregroundStyle(hasTranscript ? .primary : .secondary)
           .lineSpacing(3)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -295,16 +295,16 @@ struct RecordingOverlayView: View {
           .accessibilityHidden(true)
 
         Text(Self.formatDuration(duration))
-          .font(.system(size: 11, weight: .semibold, design: .monospaced))
+          .font(.system(.caption, design: .monospaced, weight: .semibold))
           .foregroundStyle(.primary)
       case .processing:
         Text(subtitle)
-          .font(.system(size: 11, weight: .medium))
+          .font(.caption.weight(.medium))
           .foregroundStyle(.secondary)
       case .error, .idle:
         if !subtitle.isEmpty {
           Text(subtitle)
-            .font(.system(size: 11, weight: .medium))
+            .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
         }
       }
@@ -313,7 +313,7 @@ struct RecordingOverlayView: View {
 
   private func overlayHintView(message: String) -> some View {
     Text(message)
-      .font(.system(size: 10, weight: .semibold))
+      .font(.caption2.weight(.semibold))
       .foregroundStyle(.white.opacity(0.92))
       .padding(.horizontal, 10)
       .padding(.vertical, 6)

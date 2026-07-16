@@ -7,7 +7,7 @@ struct HistoryPopoverView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Recent")
-        .font(.system(size: 11, weight: .semibold))
+        .font(.caption.weight(.semibold))
         .foregroundColor(.secondary)
         .textCase(.uppercase)
         .tracking(0.5)
@@ -15,8 +15,8 @@ struct HistoryPopoverView: View {
 
       if viewModel.snapshot.recentHistoryItems.isEmpty {
         Text("No recent transcripts")
-          .font(.system(size: 13))
-          .foregroundColor(.secondary.opacity(0.7))
+          .font(.body)
+          .foregroundColor(.secondary)
           .italic()
           .padding(.vertical, 10)
           .padding(.horizontal, 10)
@@ -73,22 +73,22 @@ private struct HistoryPopoverRow: View {
     HStack(spacing: 8) {
       VStack(alignment: .leading, spacing: 3) {
         Text(primaryText)
-          .font(.system(size: 13))
+          .font(.body)
           .lineLimit(2)
           .foregroundColor(recording.transcription != nil ? .primary : .secondary)
 
         HStack(spacing: 4) {
           Text(formatDate(recording.createdAt))
-            .font(.system(size: 10))
-            .foregroundColor(.secondary.opacity(0.7))
+            .font(.caption)
+            .foregroundColor(.secondary)
 
           if recording.transcription != nil {
             Text("·")
-              .font(.system(size: 10))
-              .foregroundColor(.secondary.opacity(0.4))
+              .font(.caption)
+              .foregroundColor(.secondary)
             Text(recording.configuration.voiceModel)
-              .font(.system(size: 10))
-              .foregroundColor(.secondary.opacity(0.5))
+              .font(.caption)
+              .foregroundColor(.secondary)
           }
         }
       }
