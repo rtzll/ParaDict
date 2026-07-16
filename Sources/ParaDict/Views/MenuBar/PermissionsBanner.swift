@@ -4,29 +4,26 @@ struct PermissionsBanner: View {
   @Environment(MenuBarViewModel.self) private var viewModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      SectionHeader(
-        title: "Permissions Needed", icon: "exclamationmark.shield.fill", iconColor: .orange)
-
-      VStack(spacing: 4) {
-        if !viewModel.snapshot.accessibilityGranted {
-          PermissionRow(
-            icon: "keyboard",
-            label: "Accessibility",
-            detail: "Required for global hotkeys"
-          ) {
-            viewModel.openAccessibilitySettings()
-          }
+    VStack(spacing: 4) {
+      if !viewModel.snapshot.accessibilityGranted {
+        PermissionRow(
+          icon: "keyboard",
+          label: "Accessibility",
+          detail: "Lets ParaDict detect your shortcut anywhere",
+          actionTitle: "Open Settings"
+        ) {
+          viewModel.openAccessibilitySettings()
         }
+      }
 
-        if !viewModel.snapshot.microphoneGranted {
-          PermissionRow(
-            icon: "mic.slash",
-            label: "Microphone",
-            detail: "Required for recording"
-          ) {
-            Task { await viewModel.requestMicrophone() }
-          }
+      if !viewModel.snapshot.microphoneGranted {
+        PermissionRow(
+          icon: "mic.slash",
+          label: "Microphone",
+          detail: "Lets ParaDict transcribe speech locally",
+          actionTitle: "Allow"
+        ) {
+          Task { await viewModel.requestMicrophone() }
         }
       }
     }
@@ -37,6 +34,7 @@ private struct PermissionRow: View {
   let icon: String
   let label: String
   let detail: String
+  let actionTitle: String
   let action: () -> Void
   @State private var isHovering = false
 
@@ -58,7 +56,7 @@ private struct PermissionRow: View {
 
         Spacer()
 
-        Text("Grant")
+        Text(actionTitle)
           .font(.caption.weight(.medium))
           .foregroundColor(.orange)
       }
@@ -72,7 +70,7 @@ private struct PermissionRow: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel("\(label) permission")
-    .accessibilityHint(detail)
+    .accessibilityHint("\(detail). \(actionTitle).")
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering

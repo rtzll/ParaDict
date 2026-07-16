@@ -25,12 +25,14 @@ struct MenuBarView: View {
       .padding(.horizontal, 16)
       .padding(.vertical, 14)
 
-      Divider()
-        .padding(.horizontal, 12)
+      if viewModel.snapshot.allPermissionsGranted {
+        Divider()
+          .padding(.horizontal, 12)
 
-      StatsBarView()
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        StatsBarView()
+          .padding(.horizontal, 16)
+          .padding(.vertical, 8)
+      }
 
       Divider()
         .padding(.horizontal, 12)
