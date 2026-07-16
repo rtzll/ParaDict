@@ -54,6 +54,20 @@ struct RecordingFeedbackPresenterTests {
     #expect(overlayStatus?.title == "Live Preview Unavailable")
   }
 
+  @Test func successfulTranscriptionUsesCompletionOverlayStatus() {
+    let toast = TestToastPresenter()
+    var overlayStatus: OverlayStatus?
+    let presenter = RecordingFeedbackPresenter(toast: toast) { status in
+      overlayStatus = status
+    }
+
+    presenter.present(RecordingFeedback(.transcriptionSucceeded))
+
+    #expect(toast.messages.isEmpty)
+    #expect(overlayStatus?.kind == .success)
+    #expect(overlayStatus?.title == "Inserted")
+  }
+
   @Test func clearOverlayStatusClearsPresentedOverlay() {
     let toast = TestToastPresenter()
     var overlayStatus: OverlayStatus?

@@ -2,6 +2,7 @@
 import Foundation
 
 enum OverlayStatusKind: Sendable {
+  case success
   case info
   case warning
   case error

@@ -10,6 +10,7 @@ struct RecordingFeedback: Equatable, Sendable {
     case livePreviewUnavailable
     case recordingCanceled
     case recordingInterrupted(String)
+    case transcriptionSucceeded
     case emptyTranscription
     case transcriptionFailed(String)
     case recordingLimitWarning(remainingSeconds: Int)
@@ -81,6 +82,15 @@ final class RecordingFeedbackPresenter: Sendable, RecordingFeedbackPresenting {
           message: message
         ),
         duration: 2.2
+      )
+    case .transcriptionSucceeded:
+      showOverlayStatus(
+        OverlayStatus(
+          kind: .success,
+          title: "Inserted",
+          message: nil
+        ),
+        duration: 0.7
       )
     case .emptyTranscription:
       showOverlayStatus(

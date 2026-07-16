@@ -200,7 +200,7 @@ final class RecordingController: Sendable {
 
     switch outcome {
     case .succeeded:
-      return
+      presentFeedback(.init(.transcriptionSucceeded))
     case .empty:
       presentFeedback(.init(.emptyTranscription))
     case .failed(let message):

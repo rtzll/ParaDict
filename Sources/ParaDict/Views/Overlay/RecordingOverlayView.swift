@@ -357,6 +357,8 @@ struct RecordingOverlayView: View {
   private var borderColor: Color {
     if let overlayStatus {
       switch overlayStatus.kind {
+      case .success:
+        return .green.opacity(0.2)
       case .info:
         return .blue.opacity(0.18)
       case .warning:
@@ -461,6 +463,17 @@ struct RecordingOverlayView: View {
         Image(systemName: "exclamationmark")
           .font(.system(size: max(10, size * 0.4), weight: .bold))
           .foregroundStyle(.red)
+      }
+    case (.success, _):
+      ZStack {
+        Circle()
+          .fill(.green.opacity(0.18))
+          .frame(width: size, height: size)
+
+        Image(systemName: "checkmark")
+          .font(.system(size: max(9, size * 0.38), weight: .bold))
+          .foregroundStyle(.green)
+          .transition(.opacity.combined(with: .scale(scale: 0.72)))
       }
     case (.info, _):
       ZStack {
