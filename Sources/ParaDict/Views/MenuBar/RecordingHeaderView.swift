@@ -11,8 +11,16 @@ struct RecordingHeaderView: View {
         .frame(width: 20)
         .animation(.easeInOut(duration: 0.15), value: statusIcon)
 
-      Text(statusText)
-        .font(.system(size: 13, weight: .medium))
+      VStack(alignment: .leading, spacing: 2) {
+        Text(presentation.title)
+          .font(.system(size: 13, weight: .medium))
+
+        if let detail = presentation.detail {
+          Text(detail)
+            .font(.system(size: 10))
+            .foregroundColor(.secondary)
+        }
+      }
 
       Spacer()
 
@@ -61,16 +69,13 @@ struct RecordingHeaderView: View {
     }
   }
 
-  private var statusText: String {
-    if !viewModel.snapshot.allPermissionsGranted {
-      return "Permissions Required"
-    }
-    switch viewModel.snapshot.recordingState {
-    case .idle: return viewModel.snapshot.modelReadiness.title
-    case .recording: return "Recording"
-    case .processing: return "Transcribing..."
-    case .error(let msg): return msg
-    }
+  private var presentation: RecordingHeaderPresentation {
+    RecordingHeaderPresentation.make(
+      recordingState: viewModel.snapshot.recordingState,
+      modelReadiness: viewModel.snapshot.modelReadiness,
+      allPermissionsGranted: viewModel.snapshot.allPermissionsGranted,
+      shortcut: viewModel.snapshot.toggleRecordingShortcut
+    )
   }
 
   private var modelReadinessColor: Color {
