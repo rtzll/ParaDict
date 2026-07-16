@@ -8,7 +8,12 @@ struct FooterBarView: View {
     HStack(spacing: 0) {
       Spacer()
 
-      FooterButton(icon: "folder.fill", label: "Recordings", color: .secondary) {
+      FooterButton(
+        icon: "folder.fill",
+        label: "Recordings",
+        color: .secondary,
+        accessibilityTitle: "Open Recordings Folder"
+      ) {
         viewModel.openRecordingsFolder()
       }
 
@@ -34,6 +39,7 @@ private struct FooterButton: View {
   let icon: String
   let label: String
   var color: Color = .secondary
+  var accessibilityTitle: String? = nil
   let action: () -> Void
   @State private var isHovering = false
 
@@ -58,8 +64,8 @@ private struct FooterButton: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(label)
-    .help(label)
+    .accessibilityLabel(accessibilityTitle ?? label)
+    .help(accessibilityTitle ?? label)
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering

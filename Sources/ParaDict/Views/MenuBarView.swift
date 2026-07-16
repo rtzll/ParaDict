@@ -17,6 +17,9 @@ struct MenuBarView: View {
     }
     .frame(width: 340)
     .environment(viewModel)
+    .onDisappear {
+      page = .controls
+    }
   }
 
   private var controls: some View {
