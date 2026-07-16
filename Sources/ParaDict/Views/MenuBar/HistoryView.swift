@@ -1,39 +1,77 @@
 import Accessibility
 import SwiftUI
 
-struct HistoryPopoverView: View {
+struct HistoryView: View {
   @Environment(MenuBarViewModel.self) private var viewModel
+  let onBack: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text("Recent")
-        .font(.caption.weight(.semibold))
-        .foregroundColor(.secondary)
-        .textCase(.uppercase)
-        .tracking(0.5)
-        .padding(.horizontal, 10)
+    VStack(spacing: 0) {
+      HStack(spacing: 8) {
+        Button(action: onBack) {
+          Image(systemName: "chevron.left")
+            .font(.caption.weight(.semibold))
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel("Back to controls")
+        .help("Back")
 
-      if viewModel.snapshot.recentHistoryItems.isEmpty {
-        Text("No recent transcripts")
-          .font(.body)
+        Text("History")
+          .font(.body.weight(.semibold))
+
+        Spacer()
+
+        Button {
+          viewModel.openRecordingsFolder()
+        } label: {
+          Image(systemName: "folder")
+            .font(.body)
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Recordings Folder")
+        .help("Open Recordings Folder")
+      }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 14)
+
+      Divider()
+        .padding(.horizontal, 12)
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Recent Transcripts")
+          .font(.caption.weight(.semibold))
           .foregroundColor(.secondary)
-          .italic()
-          .padding(.vertical, 10)
+          .textCase(.uppercase)
+          .tracking(0.5)
           .padding(.horizontal, 10)
-      } else {
-        VStack(spacing: 2) {
-          ForEach(viewModel.snapshot.recentHistoryItems) { recording in
-            HistoryPopoverRow(recording: recording)
+
+        if viewModel.snapshot.recentHistoryItems.isEmpty {
+          Text("No recent transcripts")
+            .font(.body)
+            .foregroundColor(.secondary)
+            .italic()
+            .padding(.vertical, 10)
+            .padding(.horizontal, 10)
+        } else {
+          VStack(spacing: 2) {
+            ForEach(viewModel.snapshot.recentHistoryItems) { recording in
+              HistoryRow(recording: recording)
+            }
           }
         }
       }
+      .padding(12)
     }
-    .padding(12)
-    .frame(width: 300)
+    .frame(width: 340)
   }
 }
 
-private struct HistoryPopoverRow: View {
+private struct HistoryRow: View {
   @Environment(MenuBarViewModel.self) private var viewModel
   let recording: Recording
   @State private var copied = false

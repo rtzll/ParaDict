@@ -2,24 +2,24 @@ import SwiftUI
 
 struct FooterBarView: View {
   @Environment(MenuBarViewModel.self) private var viewModel
-  @State private var showHistory = false
+  let onShowHistory: () -> Void
 
   var body: some View {
     HStack(spacing: 0) {
       Spacer()
 
-      FooterButton(icon: "folder.fill", label: "Files", color: .secondary) {
+      FooterButton(icon: "folder.fill", label: "Recordings", color: .secondary) {
         viewModel.openRecordingsFolder()
       }
 
-      FooterButton(icon: "clock.arrow.circlepath", label: "History", color: .secondary) {
-        showHistory.toggle()
-      }
-      .popover(isPresented: $showHistory, arrowEdge: .bottom) {
-        HistoryPopoverView()
-      }
+      FooterButton(
+        icon: "clock.arrow.circlepath",
+        label: "History",
+        color: .secondary,
+        action: onShowHistory
+      )
 
-      FooterButton(icon: "xmark.circle", label: "Quit", color: .red) {
+      FooterButton(icon: "power", label: "Quit", color: .secondary) {
         viewModel.quitApplication()
       }
 

@@ -2,8 +2,24 @@ import SwiftUI
 
 struct MenuBarView: View {
   @Environment(MenuBarViewModel.self) private var viewModel
+  @State private var page: Page = .controls
 
   var body: some View {
+    Group {
+      switch page {
+      case .controls:
+        controls
+      case .history:
+        HistoryView {
+          page = .controls
+        }
+      }
+    }
+    .frame(width: 340)
+    .environment(viewModel)
+  }
+
+  private var controls: some View {
     VStack(spacing: 0) {
       RecordingHeaderView()
         .padding(.horizontal, 16)
@@ -37,9 +53,14 @@ struct MenuBarView: View {
       Divider()
         .padding(.horizontal, 12)
 
-      FooterBarView()
+      FooterBarView {
+        page = .history
+      }
     }
-    .frame(width: 340)
-    .environment(viewModel)
+  }
+
+  private enum Page {
+    case controls
+    case history
   }
 }
