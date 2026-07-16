@@ -51,6 +51,7 @@ private struct SystemLivePreviewClock: LivePreviewClock {
 }
 
 actor LivePreviewSession {
+  private static let previewSampleRate = 16_000.0
   private let chunkSource = StreamingChunkSource()
   private let agreementConfig = StreamingAgreementConfig()
   private let wordConverter = StreamingTokenWordConverter()
@@ -58,7 +59,6 @@ actor LivePreviewSession {
   private var agreementEngine: StreamingAgreementEngine
 
   private var transcriptionPass: LivePreviewTranscriptionPass?
-  private var inputSampleRate: Double = 16_000
   private var chunkPumpTask: Task<Void, Never>?
   private var transcriptionLoopTask: Task<Void, Never>?
   private var audioBuffer = StreamingAudioBuffer()
@@ -118,9 +118,11 @@ actor LivePreviewSession {
     inputSampleRate: Double,
     onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) {
-    self.inputSampleRate = inputSampleRate
     self.onPreviewUpdate = onPreviewUpdate
-    self.audioBuffer.reset()
+    self.audioBuffer.reset(
+      inputSampleRate: inputSampleRate,
+      outputSampleRate: Self.previewSampleRate
+    )
     self.isTranscribing = false
     agreementEngine.reset()
 
@@ -165,7 +167,10 @@ actor LivePreviewSession {
 
     let absoluteSampleCount = audioBuffer.absoluteSampleCount
     guard
-      audioBuffer.hasEnoughAudioToProcess(inputSampleRate: inputSampleRate, minNewAudioSeconds: 0.5)
+      audioBuffer.hasEnoughAudioToProcess(
+        inputSampleRate: Self.previewSampleRate,
+        minNewAudioSeconds: 0.5
+      )
     else { return }
 
     isTranscribing = true
@@ -177,7 +182,7 @@ actor LivePreviewSession {
     guard
       let window = audioBuffer.transcriptionWindow(
         startingAt: seekTime,
-        inputSampleRate: inputSampleRate,
+        inputSampleRate: Self.previewSampleRate,
         trailingSilenceSeconds: agreementConfig.trailingSilenceSeconds
       )
     else {
@@ -187,7 +192,7 @@ actor LivePreviewSession {
     do {
       let result = try await transcriptionPass(
         window.samples,
-        inputSampleRate,
+        Self.previewSampleRate,
         window.timeOffset
       )
       audioBuffer.markProcessed(upTo: absoluteSampleCount)
@@ -211,7 +216,10 @@ actor LivePreviewSession {
         await onPreviewUpdate?(.partial(agreementResult.fullText))
       }
 
-      let trimSample = max(0, Int(agreementEngine.hypothesisStartTime * inputSampleRate))
+      let trimSample = max(
+        0,
+        Int(agreementEngine.hypothesisStartTime * Self.previewSampleRate)
+      )
       audioBuffer.trim(beforeAbsoluteSample: trimSample)
     } catch {
       // Keep recording alive; preview can recover on the next pass.
