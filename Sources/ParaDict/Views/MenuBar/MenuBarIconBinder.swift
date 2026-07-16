@@ -44,7 +44,7 @@ final class MenuBarIconBinder {
 
   private func accessibilityValue(for state: RecordingState) -> String {
     switch state {
-    case .idle: return "Ready"
+    case .idle: return "Idle"
     case .recording: return "Recording"
     case .processing: return "Transcribing"
     case .error(let message): return "Error: \(message)"

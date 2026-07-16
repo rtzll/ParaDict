@@ -51,6 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       button.action = #selector(togglePopover(_:))
       button.target = self
       button.setAccessibilityLabel("ParaDict")
+      button.setAccessibilityValue("Idle")
       button.setAccessibilityHelp("Open ParaDict controls")
     }
   }
