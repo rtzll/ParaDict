@@ -10,6 +10,7 @@ struct RecordingHeaderView: View {
         .foregroundColor(statusColor)
         .frame(width: 20)
         .animation(.easeInOut(duration: 0.15), value: statusIcon)
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(presentation.title)
@@ -28,11 +29,14 @@ struct RecordingHeaderView: View {
         Text(formatDuration(viewModel.snapshot.currentDuration))
           .font(.system(size: 11, design: .monospaced))
           .foregroundColor(.secondary)
+          .accessibilityLabel("Recording duration")
+          .accessibilityValue(formatDuration(viewModel.snapshot.currentDuration))
       } else if viewModel.snapshot.allPermissionsGranted,
         viewModel.snapshot.modelReadiness.showsProgress
       {
         ProgressView()
           .controlSize(.small)
+          .accessibilityLabel("Loading transcription model")
       } else if viewModel.snapshot.allPermissionsGranted,
         let retryTitle = viewModel.snapshot.modelReadiness.retryTitle
       {

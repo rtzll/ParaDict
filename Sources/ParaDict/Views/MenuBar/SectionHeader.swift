@@ -10,6 +10,7 @@ struct SectionHeader: View {
       Image(systemName: icon)
         .font(.system(size: 11))
         .foregroundColor(iconColor)
+        .accessibilityHidden(true)
       Text(title)
         .font(.system(size: 11, weight: .semibold))
         .foregroundColor(.secondary)

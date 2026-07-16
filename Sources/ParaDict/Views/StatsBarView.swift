@@ -35,5 +35,8 @@ private struct StatCard: View {
       RoundedRectangle(cornerRadius: 8)
         .fill(Color.primary.opacity(0.08))
     )
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(label)
+    .accessibilityValue(value)
   }
 }

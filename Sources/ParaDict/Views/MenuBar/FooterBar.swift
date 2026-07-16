@@ -58,6 +58,8 @@ private struct FooterButton: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(label)
+    .help(label)
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering

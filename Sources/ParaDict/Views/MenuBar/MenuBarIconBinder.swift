@@ -31,9 +31,23 @@ final class MenuBarIconBinder {
   }
 
   private func updateIcon() {
-    statusItem.button?.image = MenuBarIconRenderer.render(
-      state: recordingController.displayState,
+    guard let button = statusItem.button else { return }
+    let state = recordingController.displayState
+    button.image = MenuBarIconRenderer.render(
+      state: state,
       meterLevel: recordingController.recorder.meterLevel
     )
+    button.setAccessibilityLabel("ParaDict")
+    button.setAccessibilityValue(accessibilityValue(for: state))
+    button.setAccessibilityHelp("Open ParaDict controls")
+  }
+
+  private func accessibilityValue(for state: RecordingState) -> String {
+    switch state {
+    case .idle: return "Ready"
+    case .recording: return "Recording"
+    case .processing: return "Transcribing"
+    case .error(let message): return "Error: \(message)"
+    }
   }
 }

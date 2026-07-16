@@ -30,6 +30,7 @@ struct ShortcutSection: View {
               .foregroundColor(.secondary)
           }
           .buttonStyle(.plain)
+          .accessibilityLabel("Cancel shortcut recording")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -66,6 +67,11 @@ struct ShortcutSection: View {
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Toggle recording shortcut")
+        .accessibilityValue(
+          viewModel.snapshot.toggleRecordingShortcut?.compactDisplayString ?? "Not set"
+        )
+        .accessibilityHint("Record a new keyboard shortcut")
         .onHover { hovering in
           withAnimation(.easeInOut(duration: 0.12)) {
             isHovering = hovering

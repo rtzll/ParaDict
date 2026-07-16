@@ -57,6 +57,7 @@ struct RecordingOverlayView: View {
   private var compactLayout: some View {
     HStack(spacing: 12) {
       statusBadge
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
@@ -71,6 +72,7 @@ struct RecordingOverlayView: View {
 
           if case .recording = state {
             OverlayMeterView(level: meterLevel)
+              .accessibilityHidden(true)
           }
         }
       }
@@ -83,6 +85,7 @@ struct RecordingOverlayView: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .center, spacing: 8) {
         headerStatusBadge
+          .accessibilityHidden(true)
 
         Text(title)
           .font(.system(size: 11, weight: .semibold))
@@ -209,6 +212,9 @@ struct RecordingOverlayView: View {
           .lineSpacing(3)
           .frame(maxWidth: .infinity, alignment: .leading)
           .id("bottom")
+          .accessibilityLabel("Live transcript")
+          .accessibilityValue(transcriptText)
+          .accessibilityAddTraits(.updatesFrequently)
       }
       .frame(height: 56)
       .padding(.horizontal, 12)
@@ -286,6 +292,7 @@ struct RecordingOverlayView: View {
       switch state {
       case .recording:
         OverlayMeterView(level: meterLevel, barWidth: 3, frameHeight: 12, spacing: 2)
+          .accessibilityHidden(true)
 
         Text(Self.formatDuration(duration))
           .font(.system(size: 11, weight: .semibold, design: .monospaced))

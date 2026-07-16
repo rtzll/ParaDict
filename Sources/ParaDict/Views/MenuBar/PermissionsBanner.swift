@@ -71,6 +71,8 @@ private struct PermissionRow: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityLabel("\(label) permission")
+    .accessibilityHint(detail)
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering

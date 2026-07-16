@@ -50,6 +50,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       button.image = MenuBarIconRenderer.render(state: .idle, meterLevel: 0)
       button.action = #selector(togglePopover(_:))
       button.target = self
+      button.setAccessibilityLabel("ParaDict")
+      button.setAccessibilityHelp("Open ParaDict controls")
     }
   }
 

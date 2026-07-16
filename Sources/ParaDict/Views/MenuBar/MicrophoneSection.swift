@@ -43,6 +43,9 @@ struct MicrophoneSection: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .accessibilityLabel("Microphone")
+      .accessibilityValue(viewModel.snapshot.effectiveDeviceName)
+      .accessibilityHint("Choose an input device")
       .onHover { hovering in
         withAnimation(.easeInOut(duration: 0.12)) {
           isHovering = hovering
@@ -139,6 +142,9 @@ private struct MicPickerRow: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(name)
+    .accessibilityValue(isSelected ? "Selected" : "")
+    .accessibilityHint("Use this input device")
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering

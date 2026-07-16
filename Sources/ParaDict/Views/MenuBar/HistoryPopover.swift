@@ -1,3 +1,4 @@
+import Accessibility
 import SwiftUI
 
 struct HistoryPopoverView: View {
@@ -44,6 +45,7 @@ private struct HistoryPopoverRow: View {
         Button {
           viewModel.copyRecordingText(text)
           copied = true
+          AccessibilityNotification.Announcement("Transcript copied").post()
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             copied = false
           }
@@ -51,6 +53,9 @@ private struct HistoryPopoverRow: View {
           rowContent
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(primaryText)
+        .accessibilityValue(copied ? "Copied" : formatDate(recording.createdAt))
+        .accessibilityHint("Copy transcript")
       } else {
         rowContent
       }
@@ -96,11 +101,13 @@ private struct HistoryPopoverRow: View {
             .foregroundColor(.green)
             .font(.system(size: 15))
             .transition(.scale.combined(with: .opacity))
+            .accessibilityHidden(true)
         } else if isHovering {
           Image(systemName: "doc.on.doc")
             .font(.system(size: 12))
             .foregroundColor(.secondary)
             .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            .accessibilityHidden(true)
         }
       }
     }
