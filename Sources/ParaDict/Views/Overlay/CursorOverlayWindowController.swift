@@ -52,7 +52,6 @@ final class CursorOverlayWindowController: Sendable {
 
   private let model = RecordingOverlayModel()
   private var panel: OverlayPanel?
-  private var hostingView: NSHostingView<OverlayHost>?
   private var globalMouseMonitor: Any?
   private var localMouseMonitor: Any?
   private var animationTimer: Timer?
@@ -61,9 +60,9 @@ final class CursorOverlayWindowController: Sendable {
   private var lastAnimationTimestamp: TimeInterval?
   private var currentVelocity = CGVector.zero
   private var currentOrigin: NSPoint?
-  private var currentSize = NSSize(
-    width: RecordingOverlayView.compactSize.width,
-    height: RecordingOverlayView.compactSize.height
+  private let canvasSize = NSSize(
+    width: RecordingOverlayView.expandedSize.width,
+    height: RecordingOverlayView.expandedSize.height
   )
 
   func update(_ snapshot: OverlaySnapshot) {
@@ -116,7 +115,7 @@ final class CursorOverlayWindowController: Sendable {
 
   private func createPanel() {
     let panel = OverlayPanel(
-      contentRect: NSRect(origin: .zero, size: currentSize),
+      contentRect: NSRect(origin: .zero, size: canvasSize),
       styleMask: [.borderless, .nonactivatingPanel],
       backing: .buffered,
       defer: false
@@ -131,41 +130,42 @@ final class CursorOverlayWindowController: Sendable {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
 
     let hostingView = NSHostingView(rootView: OverlayHost(model: model))
-    hostingView.frame = NSRect(origin: .zero, size: currentSize)
+    hostingView.frame = NSRect(origin: .zero, size: canvasSize)
     hostingView.appearance = NSAppearance(named: .darkAqua)
     panel.contentView = hostingView
 
     self.panel = panel
-    self.hostingView = hostingView
   }
 
   private func applyContent(_ snapshot: OverlaySnapshot) {
-    model.state = snapshot.state
-    model.duration = snapshot.duration
-    model.meterLevel = snapshot.meterLevel
-    model.partialTranscript = snapshot.partialTranscript
-    model.overlayStatus = snapshot.status
-    model.overlayHint = snapshot.hint
+    let changesStructure =
+      model.state != snapshot.state
+      || model.overlayStatus != snapshot.status
+      || model.overlayHint != snapshot.hint
+    let updateModel = {
+      self.model.state = snapshot.state
+      self.model.duration = snapshot.duration
+      self.model.meterLevel = snapshot.meterLevel
+      self.model.partialTranscript = snapshot.partialTranscript
+      self.model.overlayStatus = snapshot.status
+      self.model.overlayHint = snapshot.hint
+    }
+
+    if changesStructure,
+      panel?.isVisible == true,
+      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    {
+      withAnimation(.timingCurve(0.77, 0, 0.175, 1, duration: 0.2)) {
+        updateModel()
+      }
+    } else {
+      updateModel()
+    }
 
     if !supportsAdaptiveCompactness(snapshot) {
       cursorSettleTask?.cancel()
       cursorSettleTask = nil
       setAdaptiveCompactness(false, animated: false)
-    }
-
-    let nextSize = size(
-      for: snapshot.state,
-      partialTranscript: snapshot.partialTranscript,
-      overlayStatus: snapshot.status
-    )
-    if nextSize != currentSize {
-      currentSize = nextSize
-      panel?.setContentSize(nextSize)
-      hostingView?.frame = NSRect(origin: .zero, size: nextSize)
-      reclampCurrentOrigin()
-      if panel?.isVisible == true {
-        cursorDidMove()
-      }
     }
   }
 
@@ -376,53 +376,14 @@ final class CursorOverlayWindowController: Sendable {
     let screen = screen(containing: mouseLocation) ?? NSScreen.main ?? NSScreen.screens[0]
     return OverlayPlacement.initialOrigin(
       cursor: mouseLocation,
-      size: currentSize,
+      size: canvasSize,
       visibleFrame: screen.visibleFrame,
       offset: panelOffset,
       edgePadding: edgePadding
     )
   }
 
-  private func reclampCurrentOrigin() {
-    guard let currentOrigin else { return }
-    let screen = screen(containing: currentOrigin) ?? NSScreen.main ?? NSScreen.screens[0]
-    let origin = OverlayPlacement.clampedOrigin(
-      currentOrigin,
-      size: currentSize,
-      visibleFrame: screen.visibleFrame,
-      edgePadding: edgePadding
-    )
-    self.currentOrigin = origin
-    panel?.setFrameOrigin(origin)
-  }
-
   private func screen(containing point: NSPoint) -> NSScreen? {
     NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
-  }
-
-  private func size(
-    for state: RecordingState,
-    partialTranscript: String,
-    overlayStatus: OverlayStatus?
-  ) -> NSSize {
-    if overlayStatus != nil {
-      return NSSize(
-        width: RecordingOverlayView.statusSize.width,
-        height: RecordingOverlayView.statusSize.height
-      )
-    }
-
-    let trimmedTranscript = partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    let usesExpandedLayout: Bool
-    switch state {
-    case .recording, .processing:
-      usesExpandedLayout = true
-    case .idle, .error:
-      usesExpandedLayout = !trimmedTranscript.isEmpty
-    }
-
-    let size =
-      usesExpandedLayout ? RecordingOverlayView.expandedSize : RecordingOverlayView.compactSize
-    return NSSize(width: size.width, height: size.height)
   }
 }

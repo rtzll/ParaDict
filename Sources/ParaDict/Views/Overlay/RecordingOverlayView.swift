@@ -3,6 +3,7 @@ import SwiftUI
 struct RecordingOverlayView: View {
   @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
   @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
+  @Namespace private var continuityNamespace
   let state: RecordingState
   let duration: TimeInterval
   let meterLevel: Double
@@ -47,12 +48,46 @@ struct RecordingOverlayView: View {
 
   @ViewBuilder
   private var content: some View {
-    if usesCursorCompanionLayout {
+    if overlayStatus != nil {
+      statusLayout
+        .transition(stateContentTransition)
+    } else if usesCursorCompanionLayout {
       cursorCompanionLayout
+        .transition(stateContentTransition)
     } else if usesExpandedLayout {
       transcriptFocusedLayout
+        .transition(stateContentTransition)
     } else {
       compactLayout
+        .transition(stateContentTransition)
+    }
+  }
+
+  @ViewBuilder
+  private var statusLayout: some View {
+    if let overlayStatus {
+      HStack(alignment: .center, spacing: 10) {
+        statusBadge(for: overlayStatus.kind, size: 24)
+          .matchedGeometryEffect(id: "status-badge", in: continuityNamespace)
+          .accessibilityHidden(true)
+
+        VStack(alignment: .leading, spacing: 2) {
+          Text(overlayStatus.title)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .matchedGeometryEffect(id: "status-title", in: continuityNamespace)
+
+          if let message = overlayStatus.message, !message.isEmpty {
+            Text(message)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
+        }
+
+        Spacer(minLength: 0)
+      }
     }
   }
 
@@ -105,11 +140,13 @@ struct RecordingOverlayView: View {
   private var activeHeader: some View {
     HStack(alignment: .center, spacing: 8) {
       headerStatusBadge
+        .matchedGeometryEffect(id: "status-badge", in: continuityNamespace)
         .accessibilityHidden(true)
 
       Text(title)
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
+        .matchedGeometryEffect(id: "status-title", in: continuityNamespace)
 
       Spacer(minLength: 8)
 
@@ -220,6 +257,16 @@ struct RecordingOverlayView: View {
     }
     return .opacity.combined(
       with: .scale(scale: 0.98, anchor: .bottomLeading)
+    )
+  }
+
+  private var stateContentTransition: AnyTransition {
+    if accessibilityReduceMotion {
+      return .opacity
+    }
+    return .modifier(
+      active: OverlayStateTransitionModifier(opacity: 0, blurRadius: 2, scale: 0.98),
+      identity: OverlayStateTransitionModifier(opacity: 1, blurRadius: 0, scale: 1)
     )
   }
 
@@ -438,6 +485,19 @@ struct RecordingOverlayView: View {
         .scaleEffect(size < 24 ? 0.7 : 0.85)
         .tint(.orange)
     }
+  }
+}
+
+private struct OverlayStateTransitionModifier: ViewModifier {
+  let opacity: Double
+  let blurRadius: CGFloat
+  let scale: CGFloat
+
+  func body(content: Content) -> some View {
+    content
+      .opacity(opacity)
+      .blur(radius: blurRadius)
+      .scaleEffect(scale, anchor: .bottomLeading)
   }
 }
 
