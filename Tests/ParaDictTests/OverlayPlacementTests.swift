@@ -53,14 +53,18 @@ struct OverlayPlacementTests {
     #expect(origin == NSPoint(x: 650, y: 666))
   }
 
-  @Test func cursorFollowingMovesPartwayTowardTheLatestCursorPosition() {
-    let origin = OverlayPlacement.followingOrigin(
+  @Test func cursorFollowingPreservesVelocityWhileSettlingTowardTheCursor() {
+    let step = OverlayPlacement.criticallyDampedSpringStep(
       current: NSPoint(x: 100, y: 200),
       target: NSPoint(x: 200, y: 300),
-      followAlpha: 0.35,
-      snapThreshold: 0.5
+      velocity: .zero,
+      response: 0.28,
+      elapsed: 1.0 / 60.0
     )
 
-    #expect(origin == NSPoint(x: 135, y: 235))
+    #expect(step.origin.x > 100 && step.origin.x < 200)
+    #expect(step.origin.y > 200 && step.origin.y < 300)
+    #expect(step.velocity.dx > 0)
+    #expect(step.velocity.dy > 0)
   }
 }

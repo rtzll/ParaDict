@@ -9,6 +9,7 @@ struct RecordingOverlayView: View {
   let partialTranscript: String
   let overlayStatus: OverlayStatus?
   let overlayHint: OverlayHint?
+  let isCursorMovingQuickly: Bool
 
   static let compactSize = CGSize(width: 210, height: 64)
   static let expandedSize = CGSize(width: 340, height: 124)
@@ -46,7 +47,9 @@ struct RecordingOverlayView: View {
 
   @ViewBuilder
   private var content: some View {
-    if usesExpandedLayout {
+    if usesCursorCompanionLayout {
+      cursorCompanionLayout
+    } else if usesExpandedLayout {
       transcriptFocusedLayout
     } else {
       compactLayout
@@ -80,22 +83,37 @@ struct RecordingOverlayView: View {
     }
   }
 
-  private var transcriptFocusedLayout: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .center, spacing: 8) {
-        headerStatusBadge
-          .accessibilityHidden(true)
-
-        Text(title)
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.secondary)
-
-        Spacer(minLength: 8)
-
-        headerTrailingContent
+  private var cursorCompanionLayout: some View {
+    VStack(alignment: .leading, spacing: usesExpandedLayout ? 10 : 0) {
+      if usesExpandedLayout {
+        transcriptSection
+          .transition(transcriptTransition)
       }
 
+      activeHeader
+    }
+  }
+
+  private var transcriptFocusedLayout: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      activeHeader
+
       transcriptSection
+    }
+  }
+
+  private var activeHeader: some View {
+    HStack(alignment: .center, spacing: 8) {
+      headerStatusBadge
+        .accessibilityHidden(true)
+
+      Text(title)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+
+      Spacer(minLength: 8)
+
+      headerTrailingContent
     }
   }
 
@@ -176,7 +194,7 @@ struct RecordingOverlayView: View {
 
     switch state {
     case .recording, .processing:
-      return true
+      return !isCursorMovingQuickly || overlayHint != nil
     case .idle, .error:
       return hasTranscript
     }
@@ -184,6 +202,25 @@ struct RecordingOverlayView: View {
 
   private var hasTranscript: Bool {
     !displayTranscript.isEmpty
+  }
+
+  private var usesCursorCompanionLayout: Bool {
+    guard overlayStatus == nil else { return false }
+    switch state {
+    case .recording, .processing:
+      return true
+    case .idle, .error:
+      return false
+    }
+  }
+
+  private var transcriptTransition: AnyTransition {
+    if accessibilityReduceMotion {
+      return .opacity
+    }
+    return .opacity.combined(
+      with: .scale(scale: 0.98, anchor: .bottomLeading)
+    )
   }
 
   private var width: CGFloat {

@@ -1,22 +1,44 @@
 import AppKit
 
 enum OverlayPlacement {
-  static func followingOrigin(
+  struct SpringStep {
+    let origin: NSPoint
+    let velocity: CGVector
+  }
+
+  static func criticallyDampedSpringStep(
     current: NSPoint,
     target: NSPoint,
-    followAlpha: CGFloat,
-    snapThreshold: CGFloat
-  ) -> NSPoint {
-    let deltaX = target.x - current.x
-    let deltaY = target.y - current.y
+    velocity: CGVector,
+    response: TimeInterval,
+    elapsed: TimeInterval
+  ) -> SpringStep {
+    let angularFrequency = 2 * Double.pi / max(response, 0.001)
+    let deltaTime = max(elapsed, 0)
+    let decay = exp(-angularFrequency * deltaTime)
 
-    if abs(deltaX) < snapThreshold, abs(deltaY) < snapThreshold {
-      return target
+    func updatedAxis(position: CGFloat, target: CGFloat, velocity: CGFloat) -> (
+      position: CGFloat,
+      velocity: CGFloat
+    ) {
+      let displacement = Double(position - target)
+      let initialVelocity = Double(velocity)
+      let coefficient = initialVelocity + angularFrequency * displacement
+      let nextDisplacement =
+        (displacement + coefficient * deltaTime) * decay
+      let nextVelocity =
+        (initialVelocity - angularFrequency * coefficient * deltaTime) * decay
+      return (
+        position: target + CGFloat(nextDisplacement),
+        velocity: CGFloat(nextVelocity)
+      )
     }
 
-    return NSPoint(
-      x: current.x + deltaX * followAlpha,
-      y: current.y + deltaY * followAlpha
+    let x = updatedAxis(position: current.x, target: target.x, velocity: velocity.dx)
+    let y = updatedAxis(position: current.y, target: target.y, velocity: velocity.dy)
+    return SpringStep(
+      origin: NSPoint(x: x.position, y: y.position),
+      velocity: CGVector(dx: x.velocity, dy: y.velocity)
     )
   }
 

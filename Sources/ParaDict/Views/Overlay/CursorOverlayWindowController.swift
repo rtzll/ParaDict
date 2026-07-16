@@ -10,6 +10,7 @@ final class RecordingOverlayModel {
   var partialTranscript: String = ""
   var overlayStatus: OverlayStatus? = nil
   var overlayHint: OverlayHint? = nil
+  var isCursorMovingQuickly = false
 }
 
 private struct OverlayHost: View {
@@ -22,13 +23,20 @@ private struct OverlayHost: View {
       meterLevel: model.meterLevel,
       partialTranscript: model.partialTranscript,
       overlayStatus: model.overlayStatus,
-      overlayHint: model.overlayHint
+      overlayHint: model.overlayHint,
+      isCursorMovingQuickly: model.isCursorMovingQuickly
     )
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
   }
 }
 
 @MainActor
 final class CursorOverlayWindowController: Sendable {
+  private struct CursorSample {
+    let location: NSPoint
+    let timestamp: TimeInterval
+  }
+
   private final class OverlayPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -36,8 +44,11 @@ final class CursorOverlayWindowController: Sendable {
 
   private let panelOffset = NSPoint(x: 20, y: 26)
   private let edgePadding: CGFloat = 10
-  private let followAlpha: CGFloat = 0.35
+  private let springResponse: TimeInterval = 0.22
   private let snapThreshold: CGFloat = 0.5
+  private let snapVelocityThreshold: CGFloat = 4
+  private let quickCursorVelocity: CGFloat = 650
+  private let cursorSettleDelay: Duration = .milliseconds(320)
 
   private let model = RecordingOverlayModel()
   private var panel: OverlayPanel?
@@ -45,6 +56,10 @@ final class CursorOverlayWindowController: Sendable {
   private var globalMouseMonitor: Any?
   private var localMouseMonitor: Any?
   private var animationTimer: Timer?
+  private var cursorSettleTask: Task<Void, Never>?
+  private var lastCursorSample: CursorSample?
+  private var lastAnimationTimestamp: TimeInterval?
+  private var currentVelocity = CGVector.zero
   private var currentOrigin: NSPoint?
   private var currentSize = NSSize(
     width: RecordingOverlayView.compactSize.width,
@@ -132,6 +147,12 @@ final class CursorOverlayWindowController: Sendable {
     model.overlayStatus = snapshot.status
     model.overlayHint = snapshot.hint
 
+    if !supportsAdaptiveCompactness(snapshot) {
+      cursorSettleTask?.cancel()
+      cursorSettleTask = nil
+      setAdaptiveCompactness(false, animated: false)
+    }
+
     let nextSize = size(
       for: snapshot.state,
       partialTranscript: snapshot.partialTranscript,
@@ -152,6 +173,12 @@ final class CursorOverlayWindowController: Sendable {
 
   private func startFollowingCursor() {
     positionAtCursorIfNeeded()
+    if lastCursorSample == nil {
+      lastCursorSample = CursorSample(
+        location: NSEvent.mouseLocation,
+        timestamp: ProcessInfo.processInfo.systemUptime
+      )
+    }
 
     if globalMouseMonitor == nil {
       globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) {
@@ -183,9 +210,17 @@ final class CursorOverlayWindowController: Sendable {
     }
     animationTimer?.invalidate()
     animationTimer = nil
+    cursorSettleTask?.cancel()
+    cursorSettleTask = nil
+    lastCursorSample = nil
+    lastAnimationTimestamp = nil
+    currentVelocity = .zero
+    setAdaptiveCompactness(false, animated: false)
   }
 
   private func cursorDidMove() {
+    updateAdaptiveCompactness()
+
     if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       animationTimer?.invalidate()
       animationTimer = nil
@@ -197,12 +232,15 @@ final class CursorOverlayWindowController: Sendable {
 
   private func ensureAnimating() {
     guard animationTimer == nil else { return }
-    animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
+    lastAnimationTimestamp = ProcessInfo.processInfo.systemUptime
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
       [weak self] _ in
       Task { @MainActor [weak self] in
         self?.tickAnimation()
       }
     }
+    RunLoop.main.add(timer, forMode: .common)
+    animationTimer = timer
   }
 
   private func tickAnimation() {
@@ -212,19 +250,77 @@ final class CursorOverlayWindowController: Sendable {
       return
     }
 
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let elapsed = min(
+      max(timestamp - (lastAnimationTimestamp ?? timestamp), 1.0 / 240.0),
+      1.0 / 30.0
+    )
+    lastAnimationTimestamp = timestamp
+
     let target = targetOriginForCursor()
-    let origin = OverlayPlacement.followingOrigin(
+    let step = OverlayPlacement.criticallyDampedSpringStep(
       current: currentOrigin ?? target,
       target: target,
-      followAlpha: followAlpha,
-      snapThreshold: snapThreshold
+      velocity: currentVelocity,
+      response: springResponse,
+      elapsed: elapsed
     )
-    currentOrigin = origin
-    panel.setFrameOrigin(origin)
+    currentOrigin = step.origin
+    currentVelocity = step.velocity
+    panel.setFrameOrigin(step.origin)
 
-    if origin == target {
+    let remainingDistance = distance(from: step.origin, to: target)
+    let speed = sqrt(
+      step.velocity.dx * step.velocity.dx + step.velocity.dy * step.velocity.dy
+    )
+    if remainingDistance < snapThreshold, speed < snapVelocityThreshold {
+      currentOrigin = target
+      currentVelocity = .zero
+      panel.setFrameOrigin(target)
       animationTimer?.invalidate()
       animationTimer = nil
+      lastAnimationTimestamp = nil
+    }
+  }
+
+  private func updateAdaptiveCompactness() {
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let location = NSEvent.mouseLocation
+
+    if let lastCursorSample {
+      let elapsed = max(timestamp - lastCursorSample.timestamp, 1.0 / 1_000.0)
+      let velocity = distance(from: lastCursorSample.location, to: location) / elapsed
+      if velocity >= quickCursorVelocity, supportsAdaptiveCompactness {
+        setAdaptiveCompactness(true)
+      }
+    }
+    lastCursorSample = CursorSample(location: location, timestamp: timestamp)
+
+    guard model.isCursorMovingQuickly else { return }
+    cursorSettleTask?.cancel()
+    cursorSettleTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: self?.cursorSettleDelay ?? .milliseconds(320))
+      guard !Task.isCancelled else { return }
+      self?.setAdaptiveCompactness(false)
+      self?.cursorSettleTask = nil
+    }
+  }
+
+  private func setAdaptiveCompactness(_ isCompact: Bool, animated: Bool = true) {
+    guard model.isCursorMovingQuickly != isCompact else { return }
+    guard animated else {
+      model.isCursorMovingQuickly = isCompact
+      return
+    }
+
+    let animation: Animation =
+      if isCompact {
+        .timingCurve(0.23, 1, 0.32, 1, duration: 0.14)
+      } else {
+        .timingCurve(0.65, 0, 0.35, 1, duration: 0.24)
+      }
+    withAnimation(animation) {
+      model.isCursorMovingQuickly = isCompact
     }
   }
 
@@ -236,7 +332,43 @@ final class CursorOverlayWindowController: Sendable {
   private func positionAtCursor() {
     let origin = targetOriginForCursor()
     currentOrigin = origin
+    currentVelocity = .zero
+    lastAnimationTimestamp = nil
     panel?.setFrameOrigin(origin)
+  }
+
+  private var supportsAdaptiveCompactness: Bool {
+    guard
+      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+      model.overlayStatus == nil,
+      model.overlayHint == nil
+    else { return false }
+    switch model.state {
+    case .recording, .processing:
+      return true
+    case .idle, .error:
+      return false
+    }
+  }
+
+  private func supportsAdaptiveCompactness(_ snapshot: OverlaySnapshot) -> Bool {
+    guard
+      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+      snapshot.status == nil,
+      snapshot.hint == nil
+    else { return false }
+    switch snapshot.state {
+    case .recording, .processing:
+      return true
+    case .idle, .error:
+      return false
+    }
+  }
+
+  private func distance(from start: NSPoint, to end: NSPoint) -> CGFloat {
+    let deltaX = end.x - start.x
+    let deltaY = end.y - start.y
+    return sqrt(deltaX * deltaX + deltaY * deltaY)
   }
 
   private func targetOriginForCursor() -> NSPoint {
