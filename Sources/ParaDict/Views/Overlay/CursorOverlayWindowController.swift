@@ -36,10 +36,15 @@ final class CursorOverlayWindowController: Sendable {
 
   private let panelOffset = NSPoint(x: 20, y: 26)
   private let edgePadding: CGFloat = 10
+  private let followAlpha: CGFloat = 0.35
+  private let snapThreshold: CGFloat = 0.5
 
   private let model = RecordingOverlayModel()
   private var panel: OverlayPanel?
   private var hostingView: NSHostingView<OverlayHost>?
+  private var globalMouseMonitor: Any?
+  private var localMouseMonitor: Any?
+  private var animationTimer: Timer?
   private var currentOrigin: NSPoint?
   private var currentSize = NSSize(
     width: RecordingOverlayView.compactSize.width,
@@ -65,6 +70,7 @@ final class CursorOverlayWindowController: Sendable {
   }
 
   func hide() {
+    stopFollowingCursor()
     currentOrigin = nil
     panel?.orderOut(nil)
   }
@@ -89,6 +95,8 @@ final class CursorOverlayWindowController: Sendable {
         }
       }
     }
+
+    startFollowingCursor()
   }
 
   private func createPanel() {
@@ -134,22 +142,113 @@ final class CursorOverlayWindowController: Sendable {
       panel?.setContentSize(nextSize)
       hostingView?.frame = NSRect(origin: .zero, size: nextSize)
       reclampCurrentOrigin()
+      if panel?.isVisible == true {
+        cursorDidMove()
+      }
+    }
+  }
+
+  // MARK: - Cursor following
+
+  private func startFollowingCursor() {
+    positionAtCursorIfNeeded()
+
+    if globalMouseMonitor == nil {
+      globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) {
+        [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.cursorDidMove()
+        }
+      }
+    }
+    if localMouseMonitor == nil {
+      localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) {
+        [weak self] event in
+        Task { @MainActor [weak self] in
+          self?.cursorDidMove()
+        }
+        return event
+      }
+    }
+  }
+
+  private func stopFollowingCursor() {
+    if let monitor = globalMouseMonitor {
+      NSEvent.removeMonitor(monitor)
+      globalMouseMonitor = nil
+    }
+    if let monitor = localMouseMonitor {
+      NSEvent.removeMonitor(monitor)
+      localMouseMonitor = nil
+    }
+    animationTimer?.invalidate()
+    animationTimer = nil
+  }
+
+  private func cursorDidMove() {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      animationTimer?.invalidate()
+      animationTimer = nil
+      positionAtCursor()
+    } else {
+      ensureAnimating()
+    }
+  }
+
+  private func ensureAnimating() {
+    guard animationTimer == nil else { return }
+    animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
+      [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.tickAnimation()
+      }
+    }
+  }
+
+  private func tickAnimation() {
+    guard let panel else {
+      animationTimer?.invalidate()
+      animationTimer = nil
+      return
+    }
+
+    let target = targetOriginForCursor()
+    let origin = OverlayPlacement.followingOrigin(
+      current: currentOrigin ?? target,
+      target: target,
+      followAlpha: followAlpha,
+      snapThreshold: snapThreshold
+    )
+    currentOrigin = origin
+    panel.setFrameOrigin(origin)
+
+    if origin == target {
+      animationTimer?.invalidate()
+      animationTimer = nil
     }
   }
 
   private func positionAtCursorIfNeeded() {
     guard currentOrigin == nil else { return }
+    positionAtCursor()
+  }
+
+  private func positionAtCursor() {
+    let origin = targetOriginForCursor()
+    currentOrigin = origin
+    panel?.setFrameOrigin(origin)
+  }
+
+  private func targetOriginForCursor() -> NSPoint {
     let mouseLocation = NSEvent.mouseLocation
     let screen = screen(containing: mouseLocation) ?? NSScreen.main ?? NSScreen.screens[0]
-    let origin = OverlayPlacement.initialOrigin(
+    return OverlayPlacement.initialOrigin(
       cursor: mouseLocation,
       size: currentSize,
       visibleFrame: screen.visibleFrame,
       offset: panelOffset,
       edgePadding: edgePadding
     )
-    currentOrigin = origin
-    panel?.setFrameOrigin(origin)
   }
 
   private func reclampCurrentOrigin() {

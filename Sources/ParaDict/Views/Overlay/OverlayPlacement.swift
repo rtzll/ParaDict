@@ -1,6 +1,25 @@
 import AppKit
 
 enum OverlayPlacement {
+  static func followingOrigin(
+    current: NSPoint,
+    target: NSPoint,
+    followAlpha: CGFloat,
+    snapThreshold: CGFloat
+  ) -> NSPoint {
+    let deltaX = target.x - current.x
+    let deltaY = target.y - current.y
+
+    if abs(deltaX) < snapThreshold, abs(deltaY) < snapThreshold {
+      return target
+    }
+
+    return NSPoint(
+      x: current.x + deltaX * followAlpha,
+      y: current.y + deltaY * followAlpha
+    )
+  }
+
   static func initialOrigin(
     cursor: NSPoint,
     size: NSSize,

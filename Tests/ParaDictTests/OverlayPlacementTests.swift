@@ -52,4 +52,15 @@ struct OverlayPlacementTests {
 
     #expect(origin == NSPoint(x: 650, y: 666))
   }
+
+  @Test func cursorFollowingMovesPartwayTowardTheLatestCursorPosition() {
+    let origin = OverlayPlacement.followingOrigin(
+      current: NSPoint(x: 100, y: 200),
+      target: NSPoint(x: 200, y: 300),
+      followAlpha: 0.35,
+      snapThreshold: 0.5
+    )
+
+    #expect(origin == NSPoint(x: 135, y: 235))
+  }
 }
