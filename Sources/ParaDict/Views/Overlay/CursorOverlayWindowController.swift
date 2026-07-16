@@ -11,9 +11,11 @@ final class RecordingOverlayModel {
   var overlayStatus: OverlayStatus? = nil
   var overlayHint: OverlayHint? = nil
   var isCursorMovingQuickly = false
+  var isPresented = false
 }
 
 private struct OverlayHost: View {
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
   let model: RecordingOverlayModel
 
   var body: some View {
@@ -25,6 +27,16 @@ private struct OverlayHost: View {
       overlayStatus: model.overlayStatus,
       overlayHint: model.overlayHint,
       isCursorMovingQuickly: model.isCursorMovingQuickly
+    )
+    .scaleEffect(
+      accessibilityReduceMotion || model.isPresented ? 1 : 0.86,
+      anchor: .bottomLeading
+    )
+    .blur(radius: accessibilityReduceMotion || model.isPresented ? 0 : 7)
+    .opacity(model.isPresented ? 1 : 0)
+    .offset(
+      x: accessibilityReduceMotion || model.isPresented ? 0 : -12,
+      y: accessibilityReduceMotion || model.isPresented ? 0 : 14
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
   }
@@ -49,6 +61,7 @@ final class CursorOverlayWindowController: Sendable {
   private let snapVelocityThreshold: CGFloat = 4
   private let quickCursorVelocity: CGFloat = 650
   private let cursorSettleDelay: Duration = .milliseconds(320)
+  private let dismissalDelay: Duration = .milliseconds(180)
 
   private let model = RecordingOverlayModel()
   private var panel: OverlayPanel?
@@ -56,6 +69,7 @@ final class CursorOverlayWindowController: Sendable {
   private var localMouseMonitor: Any?
   private var animationTimer: Timer?
   private var cursorSettleTask: Task<Void, Never>?
+  private var visibilityTask: Task<Void, Never>?
   private var lastCursorSample: CursorSample?
   private var lastAnimationTimestamp: TimeInterval?
   private var currentVelocity = CGVector.zero
@@ -85,8 +99,27 @@ final class CursorOverlayWindowController: Sendable {
 
   func hide() {
     stopFollowingCursor()
-    currentOrigin = nil
-    panel?.orderOut(nil)
+    visibilityTask?.cancel()
+    visibilityTask = nil
+
+    guard let panel, panel.isVisible else {
+      model.isPresented = false
+      currentOrigin = nil
+      return
+    }
+    guard model.isPresented else {
+      finishHiding()
+      return
+    }
+
+    withAnimation(dismissalAnimation) {
+      model.isPresented = false
+    }
+    visibilityTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: self?.dismissalDelay ?? .milliseconds(180))
+      guard !Task.isCancelled else { return }
+      self?.finishHiding()
+    }
   }
 
   private func show() {
@@ -95,22 +128,48 @@ final class CursorOverlayWindowController: Sendable {
     }
 
     guard let panel else { return }
+    visibilityTask?.cancel()
+    visibilityTask = nil
     positionAtCursorIfNeeded()
     if !panel.isVisible {
-      if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-        panel.alphaValue = 1
-        panel.orderFrontRegardless()
-      } else {
-        panel.alphaValue = 0
-        panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-          context.duration = 0.12
-          panel.animator().alphaValue = 1
+      model.isPresented = false
+      panel.alphaValue = 1
+      panel.orderFrontRegardless()
+      visibilityTask = Task { @MainActor [weak self] in
+        await Task.yield()
+        guard let self, !Task.isCancelled, panel.isVisible else { return }
+        withAnimation(self.presentationAnimation) {
+          self.model.isPresented = true
         }
+        self.visibilityTask = nil
+      }
+    } else if !model.isPresented {
+      withAnimation(presentationAnimation) {
+        model.isPresented = true
       }
     }
 
     startFollowingCursor()
+  }
+
+  private var presentationAnimation: Animation {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      return .easeOut(duration: 0.12)
+    }
+    return .timingCurve(0.16, 1, 0.3, 1, duration: 0.24)
+  }
+
+  private var dismissalAnimation: Animation {
+    if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      return .easeIn(duration: 0.1)
+    }
+    return .timingCurve(0.7, 0, 0.84, 0, duration: 0.16)
+  }
+
+  private func finishHiding() {
+    panel?.orderOut(nil)
+    currentOrigin = nil
+    visibilityTask = nil
   }
 
   private func createPanel() {
