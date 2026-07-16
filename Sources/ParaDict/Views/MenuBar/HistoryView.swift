@@ -73,6 +73,7 @@ struct HistoryView: View {
 
 private struct HistoryRow: View {
   @Environment(MenuBarViewModel.self) private var viewModel
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
   let recording: Recording
   @State private var copied = false
   @State private var isHovering = false
@@ -99,7 +100,12 @@ private struct HistoryRow: View {
       }
     }
     .animation(.easeInOut(duration: 0.12), value: isHovering)
-    .animation(.spring(response: 0.25, dampingFraction: 0.7), value: copied)
+    .animation(
+      accessibilityReduceMotion
+        ? .easeOut(duration: 0.15)
+        : .spring(response: 0.25, dampingFraction: 0.85),
+      value: copied
+    )
     .onHover { hovering in
       withAnimation(.easeInOut(duration: 0.12)) {
         isHovering = hovering
@@ -138,13 +144,19 @@ private struct HistoryRow: View {
           Image(systemName: "checkmark.circle.fill")
             .foregroundColor(.green)
             .font(.system(size: 15))
-            .transition(.scale.combined(with: .opacity))
+            .transition(
+              accessibilityReduceMotion ? .opacity : .scale.combined(with: .opacity)
+            )
             .accessibilityHidden(true)
         } else if isHovering {
           Image(systemName: "doc.on.doc")
             .font(.system(size: 12))
             .foregroundColor(.secondary)
-            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            .transition(
+              accessibilityReduceMotion
+                ? .opacity
+                : .opacity.combined(with: .scale(scale: 0.8))
+            )
             .accessibilityHidden(true)
         }
       }

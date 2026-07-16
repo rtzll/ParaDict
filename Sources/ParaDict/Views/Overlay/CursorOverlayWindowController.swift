@@ -84,11 +84,16 @@ final class CursorOverlayWindowController: Sendable {
 
     guard let panel else { return }
     if !panel.isVisible {
-      panel.alphaValue = 0
-      panel.orderFrontRegardless()
-      NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.12
-        panel.animator().alphaValue = 1
+      if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+      } else {
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+          context.duration = 0.12
+          panel.animator().alphaValue = 1
+        }
       }
     }
 

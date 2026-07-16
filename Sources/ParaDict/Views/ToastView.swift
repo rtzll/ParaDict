@@ -32,6 +32,8 @@ struct ToastMessage: Identifiable, Equatable {
 }
 
 struct ToastView: View {
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+  @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
   let toast: ToastMessage
   var onDismiss: (() -> Void)?
   @State private var isVisible = false
@@ -72,13 +74,23 @@ struct ToastView: View {
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 12)
-    .background(.regularMaterial)
+    .background {
+      if accessibilityReduceTransparency {
+        Color(nsColor: .windowBackgroundColor)
+      } else {
+        Rectangle().fill(.regularMaterial)
+      }
+    }
     .clipShape(RoundedRectangle(cornerRadius: 12))
     .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     .opacity(isVisible ? 1 : 0)
-    .offset(y: isVisible ? 0 : -10)
+    .offset(y: accessibilityReduceMotion || isVisible ? 0 : -10)
     .onAppear {
-      withAnimation(.spring(duration: 0.3, bounce: 0.3)) {
+      let entranceAnimation: Animation =
+        accessibilityReduceMotion
+        ? .easeOut(duration: 0.15)
+        : .spring(duration: 0.3, bounce: 0)
+      withAnimation(entranceAnimation) {
         isVisible = true
       }
 

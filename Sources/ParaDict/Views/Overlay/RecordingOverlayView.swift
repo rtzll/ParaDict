@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RecordingOverlayView: View {
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+  @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
   let state: RecordingState
   let duration: TimeInterval
   let meterLevel: Double
@@ -22,14 +24,7 @@ struct RecordingOverlayView: View {
       .padding(.horizontal, 14)
       .padding(.vertical, 12)
       .frame(width: width, height: height)
-      .background(
-        overlayShape
-          .fill(.regularMaterial)
-          .overlay(
-            overlayShape
-              .fill(Color.black.opacity(0.35))
-          )
-      )
+      .background(overlayBackground)
       .overlay(
         overlayShape
           .strokeBorder(borderColor, lineWidth: 1)
@@ -38,7 +33,11 @@ struct RecordingOverlayView: View {
         if let overlayHint, overlayStatus == nil {
           overlayHintView(message: overlayHint.message)
             .padding(.bottom, 8)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .transition(
+              accessibilityReduceMotion
+                ? .opacity
+                : .opacity.combined(with: .scale(scale: 0.96))
+            )
         }
       }
       .clipShape(overlayShape)
@@ -201,6 +200,20 @@ struct RecordingOverlayView: View {
 
   private var overlayShape: RoundedRectangle {
     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+  }
+
+  @ViewBuilder
+  private var overlayBackground: some View {
+    if accessibilityReduceTransparency {
+      overlayShape.fill(Color(nsColor: .windowBackgroundColor))
+    } else {
+      overlayShape
+        .fill(.regularMaterial)
+        .overlay(
+          overlayShape
+            .fill(Color.black.opacity(0.35))
+        )
+    }
   }
 
   private var transcriptSection: some View {
