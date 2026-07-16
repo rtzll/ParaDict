@@ -2,6 +2,22 @@ import AppKit
 import SwiftUI
 
 @MainActor
+private enum OverlayCanvas {
+  static let margin: CGFloat = 120
+  static let overlaySize = RecordingOverlayView.expandedSize
+  static let canvasSize = CGSize(
+    width: overlaySize.width + margin * 2,
+    height: overlaySize.height + margin * 2
+  )
+  static let overlayFrame = CGRect(
+    x: margin,
+    y: margin,
+    width: overlaySize.width,
+    height: overlaySize.height
+  )
+}
+
+@MainActor
 @Observable
 final class RecordingOverlayModel {
   var state: RecordingState = .idle
@@ -12,6 +28,64 @@ final class RecordingOverlayModel {
   var overlayHint: OverlayHint? = nil
   var isCursorMovingQuickly = false
   var isPresented = false
+  var tetherAnchor = CGPoint.zero
+  var tetherEndpoint = CGPoint.zero
+  var tetherStrength: CGFloat = 0
+}
+
+private struct CursorTetherView: View {
+  let anchor: CGPoint
+  let endpoint: CGPoint
+  let strength: CGFloat
+
+  var body: some View {
+    Canvas { context, _ in
+      guard strength > 0.001 else { return }
+
+      let delta = CGVector(dx: endpoint.x - anchor.x, dy: endpoint.y - anchor.y)
+      let rawLength = sqrt(delta.dx * delta.dx + delta.dy * delta.dy)
+      guard rawLength > 1 else { return }
+
+      let unit = CGVector(dx: delta.dx / rawLength, dy: delta.dy / rawLength)
+      let nominalLength: CGFloat = 33
+      let overshoot = max(0, rawLength - nominalLength)
+      let resistedOvershoot = (overshoot * 72 * 0.55) / (72 + 0.55 * overshoot)
+      let visibleLength = min(rawLength, nominalLength + resistedOvershoot)
+      let visibleEndpoint = CGPoint(
+        x: anchor.x + unit.dx * visibleLength,
+        y: anchor.y + unit.dy * visibleLength
+      )
+      let midpoint = CGPoint(
+        x: (anchor.x + visibleEndpoint.x) / 2,
+        y: (anchor.y + visibleEndpoint.y) / 2
+      )
+      let bend = min(4, visibleLength * 0.05) * strength
+      let control = CGPoint(
+        x: midpoint.x - unit.dy * bend,
+        y: midpoint.y + unit.dx * bend
+      )
+
+      var path = Path()
+      path.move(to: anchor)
+      path.addQuadCurve(to: visibleEndpoint, control: control)
+
+      let opacity = Double(strength) * 0.26
+      context.stroke(
+        path,
+        with: .linearGradient(
+          Gradient(colors: [
+            Color.white.opacity(opacity),
+            Color.white.opacity(opacity * 0.12),
+          ]),
+          startPoint: anchor,
+          endPoint: visibleEndpoint
+        ),
+        style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
+      )
+    }
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+  }
 }
 
 private struct OverlayHost: View {
@@ -19,26 +93,41 @@ private struct OverlayHost: View {
   let model: RecordingOverlayModel
 
   var body: some View {
-    RecordingOverlayView(
-      state: model.state,
-      duration: model.duration,
-      meterLevel: model.meterLevel,
-      partialTranscript: model.partialTranscript,
-      overlayStatus: model.overlayStatus,
-      overlayHint: model.overlayHint,
-      isCursorMovingQuickly: model.isCursorMovingQuickly
-    )
-    .scaleEffect(
-      accessibilityReduceMotion || model.isPresented ? 1 : 0.86,
-      anchor: .bottomLeading
-    )
-    .blur(radius: accessibilityReduceMotion || model.isPresented ? 0 : 7)
-    .opacity(model.isPresented ? 1 : 0)
-    .offset(
-      x: accessibilityReduceMotion || model.isPresented ? 0 : -12,
-      y: accessibilityReduceMotion || model.isPresented ? 0 : 14
-    )
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+    ZStack(alignment: .topLeading) {
+      CursorTetherView(
+        anchor: model.tetherAnchor,
+        endpoint: model.tetherEndpoint,
+        strength: accessibilityReduceMotion ? 0 : model.tetherStrength
+      )
+      .frame(width: OverlayCanvas.canvasSize.width, height: OverlayCanvas.canvasSize.height)
+
+      RecordingOverlayView(
+        state: model.state,
+        duration: model.duration,
+        meterLevel: model.meterLevel,
+        partialTranscript: model.partialTranscript,
+        overlayStatus: model.overlayStatus,
+        overlayHint: model.overlayHint,
+        isCursorMovingQuickly: model.isCursorMovingQuickly
+      )
+      .scaleEffect(
+        accessibilityReduceMotion || model.isPresented ? 1 : 0.86,
+        anchor: .bottomLeading
+      )
+      .blur(radius: accessibilityReduceMotion || model.isPresented ? 0 : 7)
+      .opacity(model.isPresented ? 1 : 0)
+      .offset(
+        x: accessibilityReduceMotion || model.isPresented ? 0 : -12,
+        y: accessibilityReduceMotion || model.isPresented ? 0 : 14
+      )
+      .frame(
+        width: OverlayCanvas.overlaySize.width,
+        height: OverlayCanvas.overlaySize.height,
+        alignment: .bottomLeading
+      )
+      .offset(x: OverlayCanvas.margin, y: OverlayCanvas.margin)
+    }
+    .frame(width: OverlayCanvas.canvasSize.width, height: OverlayCanvas.canvasSize.height)
   }
 }
 
@@ -75,8 +164,8 @@ final class CursorOverlayWindowController: Sendable {
   private var currentVelocity = CGVector.zero
   private var currentOrigin: NSPoint?
   private let canvasSize = NSSize(
-    width: RecordingOverlayView.expandedSize.width,
-    height: RecordingOverlayView.expandedSize.height
+    width: OverlayCanvas.canvasSize.width,
+    height: OverlayCanvas.canvasSize.height
   )
 
   func update(_ snapshot: OverlaySnapshot) {
@@ -274,6 +363,7 @@ final class CursorOverlayWindowController: Sendable {
     lastCursorSample = nil
     lastAnimationTimestamp = nil
     currentVelocity = .zero
+    setTetherHidden()
     setAdaptiveCompactness(false, animated: false)
   }
 
@@ -329,6 +419,11 @@ final class CursorOverlayWindowController: Sendable {
     panel.setFrameOrigin(step.origin)
 
     let remainingDistance = distance(from: step.origin, to: target)
+    updateTether(
+      panelOrigin: step.origin,
+      cursor: NSEvent.mouseLocation,
+      lag: remainingDistance
+    )
     let speed = sqrt(
       step.velocity.dx * step.velocity.dx + step.velocity.dy * step.velocity.dy
     )
@@ -336,6 +431,7 @@ final class CursorOverlayWindowController: Sendable {
       currentOrigin = target
       currentVelocity = .zero
       panel.setFrameOrigin(target)
+      setTetherHidden()
       animationTimer?.invalidate()
       animationTimer = nil
       lastAnimationTimestamp = nil
@@ -394,6 +490,7 @@ final class CursorOverlayWindowController: Sendable {
     currentVelocity = .zero
     lastAnimationTimestamp = nil
     panel?.setFrameOrigin(origin)
+    setTetherHidden()
   }
 
   private var supportsAdaptiveCompactness: Bool {
@@ -430,15 +527,80 @@ final class CursorOverlayWindowController: Sendable {
     return sqrt(deltaX * deltaX + deltaY * deltaY)
   }
 
+  private func updateTether(
+    panelOrigin: NSPoint,
+    cursor: NSPoint,
+    lag: CGFloat
+  ) {
+    guard supportsTether else {
+      setTetherHidden()
+      return
+    }
+
+    let strength = min(max((lag - 5) / 48, 0), 1)
+    guard strength > 0 else {
+      setTetherHidden()
+      return
+    }
+
+    let rawEndpoint = CGPoint(
+      x: cursor.x - panelOrigin.x,
+      y: canvasSize.height - (cursor.y - panelOrigin.y)
+    )
+    guard !OverlayCanvas.overlayFrame.contains(rawEndpoint) else {
+      setTetherHidden()
+      return
+    }
+
+    let endpoint = CGPoint(
+      x: min(max(rawEndpoint.x, 2), canvasSize.width - 2),
+      y: min(max(rawEndpoint.y, 2), canvasSize.height - 2)
+    )
+    let anchor = CGPoint(
+      x: min(max(rawEndpoint.x, OverlayCanvas.overlayFrame.minX), OverlayCanvas.overlayFrame.maxX),
+      y: min(max(rawEndpoint.y, OverlayCanvas.overlayFrame.minY), OverlayCanvas.overlayFrame.maxY)
+    )
+
+    model.tetherAnchor = anchor
+    model.tetherEndpoint = endpoint
+    model.tetherStrength = strength
+  }
+
+  private func setTetherHidden() {
+    guard model.tetherStrength != 0 else { return }
+    model.tetherStrength = 0
+  }
+
+  private var supportsTether: Bool {
+    guard
+      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+      model.overlayStatus == nil,
+      model.overlayHint == nil
+    else { return false }
+    switch model.state {
+    case .recording, .processing:
+      return true
+    case .idle, .error:
+      return false
+    }
+  }
+
   private func targetOriginForCursor() -> NSPoint {
     let mouseLocation = NSEvent.mouseLocation
     let screen = screen(containing: mouseLocation) ?? NSScreen.main ?? NSScreen.screens[0]
-    return OverlayPlacement.initialOrigin(
+    let overlayOrigin = OverlayPlacement.initialOrigin(
       cursor: mouseLocation,
-      size: canvasSize,
+      size: NSSize(
+        width: OverlayCanvas.overlaySize.width,
+        height: OverlayCanvas.overlaySize.height
+      ),
       visibleFrame: screen.visibleFrame,
       offset: panelOffset,
       edgePadding: edgePadding
+    )
+    return NSPoint(
+      x: overlayOrigin.x - OverlayCanvas.margin,
+      y: overlayOrigin.y - OverlayCanvas.margin
     )
   }
 
