@@ -36,15 +36,10 @@ final class CursorOverlayWindowController: Sendable {
 
   private let panelOffset = NSPoint(x: 20, y: 26)
   private let edgePadding: CGFloat = 10
-  private let followAlpha: CGFloat = 0.35
-  private let snapThreshold: CGFloat = 0.5
 
   private let model = RecordingOverlayModel()
   private var panel: OverlayPanel?
   private var hostingView: NSHostingView<OverlayHost>?
-  private var globalMouseMonitor: Any?
-  private var localMouseMonitor: Any?
-  private var animationTimer: Timer?
   private var currentOrigin: NSPoint?
   private var currentSize = NSSize(
     width: RecordingOverlayView.compactSize.width,
@@ -54,17 +49,15 @@ final class CursorOverlayWindowController: Sendable {
   func update(_ snapshot: OverlaySnapshot) {
     switch snapshot.state {
     case .recording, .processing:
-      show()
-      applyContent(
-        snapshot
-      )
-    case .error:
-      show()
       applyContent(snapshot)
+      show()
+    case .error:
+      applyContent(snapshot)
+      show()
     case .idle:
       if snapshot.status != nil {
-        show()
         applyContent(snapshot)
+        show()
       } else {
         hide()
       }
@@ -72,7 +65,6 @@ final class CursorOverlayWindowController: Sendable {
   }
 
   func hide() {
-    stopFollowingCursor()
     currentOrigin = nil
     panel?.orderOut(nil)
   }
@@ -83,6 +75,7 @@ final class CursorOverlayWindowController: Sendable {
     }
 
     guard let panel else { return }
+    positionAtCursorIfNeeded()
     if !panel.isVisible {
       if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
         panel.alphaValue = 1
@@ -96,8 +89,6 @@ final class CursorOverlayWindowController: Sendable {
         }
       }
     }
-
-    startFollowingCursor()
   }
 
   private func createPanel() {
@@ -142,102 +133,36 @@ final class CursorOverlayWindowController: Sendable {
       currentSize = nextSize
       panel?.setContentSize(nextSize)
       hostingView?.frame = NSRect(origin: .zero, size: nextSize)
-      // Resize can push the overlay off the cursor anchor; kick the animation to re-clamp.
-      ensureAnimating()
+      reclampCurrentOrigin()
     }
   }
 
-  // MARK: - Cursor following (event-driven)
-
-  private func startFollowingCursor() {
-    if currentOrigin == nil {
-      let target = targetOriginForCursor()
-      currentOrigin = target
-      panel?.setFrameOrigin(target)
-    }
-
-    if globalMouseMonitor == nil {
-      globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) {
-        [weak self] _ in
-        Task { @MainActor [weak self] in
-          self?.ensureAnimating()
-        }
-      }
-    }
-    if localMouseMonitor == nil {
-      localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) {
-        [weak self] event in
-        Task { @MainActor [weak self] in
-          self?.ensureAnimating()
-        }
-        return event
-      }
-    }
-  }
-
-  private func stopFollowingCursor() {
-    if let monitor = globalMouseMonitor {
-      NSEvent.removeMonitor(monitor)
-      globalMouseMonitor = nil
-    }
-    if let monitor = localMouseMonitor {
-      NSEvent.removeMonitor(monitor)
-      localMouseMonitor = nil
-    }
-    animationTimer?.invalidate()
-    animationTimer = nil
-  }
-
-  private func ensureAnimating() {
-    guard animationTimer == nil else { return }
-    animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
-      [weak self] _ in
-      Task { @MainActor [weak self] in
-        self?.tickAnimation()
-      }
-    }
-  }
-
-  private func tickAnimation() {
-    guard let panel else {
-      animationTimer?.invalidate()
-      animationTimer = nil
-      return
-    }
-
-    let target = targetOriginForCursor()
-    let current = currentOrigin ?? target
-    let dx = target.x - current.x
-    let dy = target.y - current.y
-
-    if abs(dx) < snapThreshold && abs(dy) < snapThreshold {
-      currentOrigin = target
-      panel.setFrameOrigin(target)
-      animationTimer?.invalidate()
-      animationTimer = nil
-      return
-    }
-
-    let newOrigin = NSPoint(
-      x: current.x + dx * followAlpha,
-      y: current.y + dy * followAlpha
-    )
-    currentOrigin = newOrigin
-    panel.setFrameOrigin(newOrigin)
-  }
-
-  private func targetOriginForCursor() -> NSPoint {
+  private func positionAtCursorIfNeeded() {
+    guard currentOrigin == nil else { return }
     let mouseLocation = NSEvent.mouseLocation
     let screen = screen(containing: mouseLocation) ?? NSScreen.main ?? NSScreen.screens[0]
-    let visibleFrame = screen.visibleFrame.insetBy(dx: edgePadding, dy: edgePadding)
+    let origin = OverlayPlacement.initialOrigin(
+      cursor: mouseLocation,
+      size: currentSize,
+      visibleFrame: screen.visibleFrame,
+      offset: panelOffset,
+      edgePadding: edgePadding
+    )
+    currentOrigin = origin
+    panel?.setFrameOrigin(origin)
+  }
 
-    let rawX = mouseLocation.x + panelOffset.x
-    let rawY = mouseLocation.y + panelOffset.y
-
-    let clampedX = min(max(rawX, visibleFrame.minX), visibleFrame.maxX - currentSize.width)
-    let clampedY = min(max(rawY, visibleFrame.minY), visibleFrame.maxY - currentSize.height)
-
-    return NSPoint(x: clampedX, y: clampedY)
+  private func reclampCurrentOrigin() {
+    guard let currentOrigin else { return }
+    let screen = screen(containing: currentOrigin) ?? NSScreen.main ?? NSScreen.screens[0]
+    let origin = OverlayPlacement.clampedOrigin(
+      currentOrigin,
+      size: currentSize,
+      visibleFrame: screen.visibleFrame,
+      edgePadding: edgePadding
+    )
+    self.currentOrigin = origin
+    panel?.setFrameOrigin(origin)
   }
 
   private func screen(containing point: NSPoint) -> NSScreen? {
