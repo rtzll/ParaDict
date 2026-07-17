@@ -108,16 +108,18 @@ final class RecordingCaptureStartWorkflow: Sendable {
     for session: PendingRecordingSession,
     onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async -> Bool {
+    mediaPlayback.prepareForRecording(inputDeviceID: session.resolvedDevice.deviceID)
+
     do {
       try await recorder.startRecording(
         to: session.audioURL,
         resolvedDevice: session.resolvedDevice
       )
       feedbackPresenter.clearOverlayStatus()
-      mediaPlayback.pauseMedia()
       sessionRuntime.markRecordingStarted()
       return true
     } catch {
+      await mediaPlayback.restoreAfterRecording()
       feedbackPresenter.present(.init(.recordingStartFailed(error.localizedDescription)))
       recorder.reset()
       sessionRuntime.clearActiveCapture()

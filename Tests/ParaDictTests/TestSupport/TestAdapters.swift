@@ -3,6 +3,19 @@ import Foundation
 
 @testable import ParaDict
 
+final class TestEventLog: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedEvents: [String] = []
+
+  var events: [String] {
+    lock.withLock { storedEvents }
+  }
+
+  func append(_ event: String) {
+    lock.withLock { storedEvents.append(event) }
+  }
+}
+
 @MainActor
 final class TestToastPresenter: ToastPresenting, @unchecked Sendable {
   struct PresentedMessage {

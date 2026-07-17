@@ -13,17 +13,20 @@ protocol RecordingCaptureStopping: AnyObject {
 @MainActor
 final class RecordingCaptureShutdownWorkflow: Sendable {
   private let recorder: RecordingCaptureStopping
+  private let mediaPlayback: MediaPlaybackController
   private let sessionRuntime: RecordingSessionRuntime
   private let clearRecordingPresentation: @MainActor () -> Void
   private let clearOverlayStatus: @MainActor () -> Void
 
   init(
     recorder: RecordingCaptureStopping,
+    mediaPlayback: MediaPlaybackController = MediaPlaybackController(),
     sessionRuntime: RecordingSessionRuntime,
     clearRecordingPresentation: @escaping @MainActor () -> Void,
     clearOverlayStatus: @escaping @MainActor () -> Void
   ) {
     self.recorder = recorder
+    self.mediaPlayback = mediaPlayback
     self.sessionRuntime = sessionRuntime
     self.clearRecordingPresentation = clearRecordingPresentation
     self.clearOverlayStatus = clearOverlayStatus
@@ -33,6 +36,7 @@ final class RecordingCaptureShutdownWorkflow: Sendable {
     await cancelStreamingSession()
     clearRecordingPresentation()
     await recorder.cancelRecording()
+    await mediaPlayback.restoreAfterRecording()
     recorder.reset()
     sessionRuntime.clearActiveCapture()
     sessionRuntime.finishRecordingCancellation()
@@ -48,7 +52,10 @@ final class RecordingCaptureShutdownWorkflow: Sendable {
       return nil
     }
 
-    guard let audioURL = await recorder.stopRecording() else {
+    let audioURL = await recorder.stopRecording()
+    await mediaPlayback.restoreAfterRecording()
+
+    guard let audioURL else {
       await cancelStreamingSession()
       clearRecordingPresentation()
       recorder.reset()
@@ -75,6 +82,7 @@ final class RecordingCaptureShutdownWorkflow: Sendable {
 
   func stopCaptureForCancellation() async -> URL? {
     let audioURL = await recorder.stopRecording()
+    await mediaPlayback.restoreAfterRecording()
     await cancelStreamingSession()
     clearRecordingPresentation()
     recorder.reset()

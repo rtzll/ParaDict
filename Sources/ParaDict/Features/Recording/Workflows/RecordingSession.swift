@@ -71,6 +71,7 @@ final class RecordingSession: Sendable {
     )
     let captureShutdownWorkflow = RecordingCaptureShutdownWorkflow(
       recorder: recorder,
+      mediaPlayback: mediaPlayback,
       sessionRuntime: sessionRuntime,
       clearRecordingPresentation: clearRecordingPresentation,
       clearOverlayStatus: clearOverlayStatus
@@ -146,7 +147,10 @@ final class RecordingSession: Sendable {
     sessionRuntime.clearPendingCancelShortcut()
     callbacks.handleEvent(.previewUpdate(.reset))
     feedbackPresenter.clearOverlayStatus()
-    Task { await session?.cancel() }
+    Task { [mediaPlayback] in
+      await session?.cancel()
+      await mediaPlayback.restoreAfterRecording()
+    }
     feedbackPresenter.present(.init(.recordingInterrupted(message)))
     recorder.reset()
   }
@@ -159,12 +163,9 @@ final class RecordingSession: Sendable {
     }
   }
 
-  private func completeActiveRecordingSession(resumeMedia: Bool = true) {
+  private func completeActiveRecordingSession() {
     sessionRuntime.clearPendingCancelShortcut()
     durationMonitor.stop()
-    if resumeMedia {
-      mediaPlayback.resumeIfPaused()
-    }
     callbacks.handleEvent(.recordingEnded)
   }
 

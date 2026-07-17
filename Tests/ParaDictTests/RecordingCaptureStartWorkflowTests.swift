@@ -5,6 +5,44 @@ import Testing
 
 @MainActor
 struct RecordingCaptureStartWorkflowTests {
+  @Test func pausesMediaBeforeStartingCapture() async {
+    let events = TestEventLog()
+    let recorder = WorkflowStartingRecorder()
+    recorder.eventLog = events
+    let mediaClient = FakeMediaRemote()
+    mediaClient.audioActive = true
+    mediaClient.eventLog = events
+    let preparation = WorkflowCapturePreparing()
+    preparation.prepareOutcome = .ready(
+      RecordingSessionPreparation(
+        session: PendingRecordingSession(
+          recordingId: "recording-order",
+          resolvedDevice: ResolvedRecordingDevice(
+            deviceID: 42,
+            resolvedDeviceName: "Mic",
+            didFallbackToSystemDefault: false,
+            requestedMode: .systemDefault
+          ),
+          audioURL: URL(fileURLWithPath: "/tmp/recording-order.wav"),
+          streamingSession: LivePreviewSession()
+        ),
+        didFallbackToSystemDefault: false
+      ))
+    let workflow = RecordingCaptureStartWorkflow(
+      recorder: recorder,
+      mediaPlayback: MediaPlaybackController(client: mediaClient),
+      sessionRuntime: RecordingSessionRuntime(),
+      modelReadiness: WorkflowModelReadiness(),
+      capturePreparationWorkflow: preparation,
+      feedbackPresenter: WorkflowToastPresenter()
+    )
+
+    let outcome = await workflow.startRecording { _ in }
+
+    #expect(outcome == .started)
+    #expect(events.events.prefix(2) == ["pause-media", "capture-start"])
+  }
+
   @Test func modelNotReadyShowsErrorAndDoesNotStart() async {
     let recorder = WorkflowStartingRecorder()
     let toast = WorkflowToastPresenter()
@@ -108,12 +146,18 @@ struct RecordingCaptureStartWorkflowTests {
   }
 
   @Test func startFailureResetsRecorderAndSession() async {
+    let events = TestEventLog()
     let recorder = WorkflowStartingRecorder()
+    recorder.eventLog = events
     recorder.startError = NSError(
       domain: "RecordingCaptureStartWorkflowTests",
       code: 7,
       userInfo: [NSLocalizedDescriptionKey: "cannot start recorder"]
     )
+    let mediaClient = FakeMediaRemote()
+    mediaClient.audioActive = true
+    mediaClient.eventLog = events
+    recorder.mediaClientToDeactivate = mediaClient
     let toast = WorkflowToastPresenter()
     let sessionRuntime = RecordingSessionRuntime()
     let preparation = WorkflowCapturePreparing()
@@ -135,7 +179,7 @@ struct RecordingCaptureStartWorkflowTests {
     var partialTranscript = "existing"
     let workflow = RecordingCaptureStartWorkflow(
       recorder: recorder,
-      mediaPlayback: MediaPlaybackController(),
+      mediaPlayback: MediaPlaybackController(client: mediaClient),
       sessionRuntime: sessionRuntime,
       modelReadiness: WorkflowModelReadiness(),
       capturePreparationWorkflow: preparation,
@@ -158,6 +202,7 @@ struct RecordingCaptureStartWorkflowTests {
     #expect(sessionRuntime.currentRecordingId == nil)
     #expect(toast.errors.count == 1)
     #expect(toast.errors[0].message == "cannot start recorder")
+    #expect(events.events == ["pause-media", "capture-start", "play-media"])
   }
 }
 
@@ -166,11 +211,15 @@ private final class WorkflowStartingRecorder: RecordingCaptureStarting, @uncheck
   var actualSampleRate: Double = 16_000
   var onAudioChunk: ((Data) -> Void)?
   var startError: Error?
+  var eventLog: TestEventLog?
+  var mediaClientToDeactivate: FakeMediaRemote?
   private(set) var startCalls = 0
   private(set) var resetCalls = 0
 
   func startRecording(to url: URL, resolvedDevice: ResolvedRecordingDevice) async throws {
+    eventLog?.append("capture-start")
     startCalls += 1
+    mediaClientToDeactivate?.audioActive = false
     if let startError {
       throw startError
     }

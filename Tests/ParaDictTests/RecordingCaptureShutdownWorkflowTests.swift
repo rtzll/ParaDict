@@ -92,14 +92,23 @@ struct RecordingCaptureShutdownWorkflowTests {
   }
 
   @Test func cancellationStopReturnsAudioURLAndClearsSession() async throws {
+    let events = TestEventLog()
     let recorder = WorkflowStoppingRecorder()
+    recorder.eventLog = events
     recorder.stopRecordingResult = try makeAudioFile(named: "cancel.wav", size: 4)
+    let mediaClient = FakeMediaRemote()
+    mediaClient.audioActive = true
+    let mediaPlayback = MediaPlaybackController(client: mediaClient)
+    mediaPlayback.prepareForRecording()
+    mediaClient.audioActive = false
+    mediaClient.eventLog = events
     let sessionRuntime = RecordingSessionRuntime()
     sessionRuntime.beginActiveCapture(recordingId: "recording-cancel")
     sessionRuntime.forceStateForTesting(.recording)
     var clearedPresentationCount = 0
     let workflow = RecordingCaptureShutdownWorkflow(
       recorder: recorder,
+      mediaPlayback: mediaPlayback,
       sessionRuntime: sessionRuntime,
       clearRecordingPresentation: { clearedPresentationCount += 1 },
       clearOverlayStatus: {}
@@ -113,6 +122,7 @@ struct RecordingCaptureShutdownWorkflowTests {
     #expect(clearedPresentationCount == 1)
     #expect(sessionRuntime.recordingState == .idle)
     #expect(sessionRuntime.currentRecordingId == nil)
+    #expect(events.events == ["capture-stop", "play-media"])
   }
 
   private func makeAudioFile(named name: String, size: Int) throws -> URL {
@@ -131,11 +141,13 @@ private final class WorkflowStoppingRecorder: RecordingCaptureStopping, @uncheck
   var actualSampleRate: Double = 44_100
   var actualInputDeviceName: String = "Test Mic"
   var stopRecordingResult: URL?
+  var eventLog: TestEventLog?
   private(set) var stopRecordingCalls = 0
   private(set) var cancelRecordingCalls = 0
   private(set) var resetCalls = 0
 
   func stopRecording() async -> URL? {
+    eventLog?.append("capture-stop")
     stopRecordingCalls += 1
     return stopRecordingResult
   }
