@@ -8,20 +8,16 @@ protocol MediaRemoteClient: Sendable {
   func sendPlay() -> Bool
   func isSystemAudioMuted() -> Bool?
   func setSystemAudioMuted(_ muted: Bool) -> Bool
-  func isBluetoothInputDevice(_ deviceID: AudioDeviceID) -> Bool
 }
 
 struct MediaPlaybackTiming: Sendable {
   let muteFallbackDelay: Duration
-  let bluetoothRestorationDelay: Duration
 
   static let live = MediaPlaybackTiming(
-    muteFallbackDelay: .milliseconds(220),
-    bluetoothRestorationDelay: .seconds(1)
+    muteFallbackDelay: .milliseconds(220)
   )
   static let immediate = MediaPlaybackTiming(
-    muteFallbackDelay: .zero,
-    bluetoothRestorationDelay: .zero
+    muteFallbackDelay: .zero
   )
 }
 
@@ -90,29 +86,6 @@ final class MediaRemoteFramework: MediaRemoteClient, @unchecked Sendable {
     return status == noErr
   }
 
-  func isBluetoothInputDevice(_ deviceID: AudioDeviceID) -> Bool {
-    guard deviceID != kAudioObjectUnknown else { return false }
-
-    var address = AudioObjectPropertyAddress(
-      mSelector: kAudioDevicePropertyTransportType,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-    var transportType: UInt32 = 0
-    var size = UInt32(MemoryLayout<UInt32>.size)
-    let status = AudioObjectGetPropertyData(
-      deviceID,
-      &address,
-      0,
-      nil,
-      &size,
-      &transportType
-    )
-    guard status == noErr else { return false }
-    return transportType == kAudioDeviceTransportTypeBluetooth
-      || transportType == kAudioDeviceTransportTypeBluetoothLE
-  }
-
   private static var outputMuteAddress: AudioObjectPropertyAddress {
     AudioObjectPropertyAddress(
       mSelector: kAudioDevicePropertyMute,
@@ -144,7 +117,6 @@ final class MediaPlaybackController {
   private var resumePending = false
   private var didMuteSystemAudio = false
   private var muteFallbackTask: Task<Void, Never>?
-  private var restorationDelay: Duration = .zero
   private var recordingGeneration = 0
 
   init(
@@ -159,15 +131,12 @@ final class MediaPlaybackController {
     self.sleep = sleep
   }
 
-  func prepareForRecording(inputDeviceID: AudioDeviceID = kAudioObjectUnknown) {
+  func prepareForRecording() {
     muteFallbackTask?.cancel()
     muteFallbackTask = nil
     recordingGeneration &+= 1
     let generation = recordingGeneration
     resumePending = false
-    restorationDelay =
-      client.isBluetoothInputDevice(inputDeviceID)
-      ? timing.bluetoothRestorationDelay : .zero
     guard client.isSystemAudioActive() else {
       log.info("prepareForRecording: no system audio, skipping")
       return
@@ -189,29 +158,13 @@ final class MediaPlaybackController {
 
     let shouldResume = resumePending
     let shouldRestoreMute = didMuteSystemAudio
-    let delay = restorationDelay
-    let generation = recordingGeneration
 
     guard shouldResume || shouldRestoreMute else {
-      restorationDelay = .zero
       log.info("restoreAfterRecording: no media restoration pending")
       return
     }
 
-    if delay != .zero {
-      log.info("restoreAfterRecording: waiting for Bluetooth output route to settle")
-      await sleep(delay)
-    }
-
-    guard generation == recordingGeneration else {
-      log.info("restoreAfterRecording: newer recording superseded pending restoration")
-      return
-    }
-
-    defer {
-      resumePending = false
-      restorationDelay = .zero
-    }
+    defer { resumePending = false }
 
     restoreSystemAudioMuteIfOwned()
 

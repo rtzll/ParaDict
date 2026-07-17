@@ -1,3 +1,4 @@
+import Atomics
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -10,11 +11,19 @@ struct CaptureSessionInfo: Sendable {
 }
 
 /// Accessed from both the control queue and CoreAudio real-time callbacks.
-/// The audio callback reads `isRecording` and buffer pointers; start/stop
-/// sequence these so the callback never sees partial teardown state.
+/// The audio callback reads `recordingActive` and buffer pointers; start/stop
+/// use atomics and drain in-flight callbacks before tearing those buffers down.
 /// Closure properties (`onRMS`, `onAudioChunk`, `onSessionFailure`) must be
 /// set before `startRecording` and not modified while recording.
 final class CoreAudioInputCapture: @unchecked Sendable {
+  private final class InputCallbackContext: @unchecked Sendable {
+    weak var capture: CoreAudioInputCapture?
+
+    init(capture: CoreAudioInputCapture) {
+      self.capture = capture
+    }
+  }
+
   private let logger = Logger(subsystem: Logger.subsystem, category: "CoreAudioInputCapture")
   private let controlQueue: DispatchQueue
 
@@ -26,7 +35,9 @@ final class CoreAudioInputCapture: @unchecked Sendable {
   private var audioFile: ExtAudioFileRef?
   private var currentDeviceID: AudioDeviceID = 0
   private var currentDeviceName = "Unknown Device"
+  // Control-queue session state; the render callback uses the atomic gate below.
   private var isRecording = false
+  private var isAudioUnitInitialized = false
 
   private var inputFormat = AudioStreamBasicDescription()
   private var fileFormat = AudioStreamBasicDescription()
@@ -38,13 +49,17 @@ final class CoreAudioInputCapture: @unchecked Sendable {
   private var listenersInstalled = false
   private var hasReportedFailure = false
   private let failureLock = NSLock()
+  // Enabled immediately before AUHAL starts and disabled before stop/teardown.
+  private let recordingActive = ManagedAtomic(false)
+  private let renderCallbacksInFlight = ManagedAtomic<UInt32>(0)
+  private var inputCallbackContext: Unmanaged<InputCallbackContext>?
 
   init(controlQueue: DispatchQueue) {
     self.controlQueue = controlQueue
   }
 
   deinit {
-    stopRecording()
+    teardown()
   }
 
   func startRecording(toOutputFile url: URL, deviceID: AudioDeviceID) throws -> CaptureSessionInfo {
@@ -54,18 +69,28 @@ final class CoreAudioInputCapture: @unchecked Sendable {
       throw CoreAudioInputCaptureError.invalidDeviceID
     }
 
-    currentDeviceID = deviceID
-    currentDeviceName = Self.queryDeviceName(deviceID) ?? "Unknown Device"
     hasReportedFailure = false
 
-    try createAudioUnit()
-    try bindInputDevice(deviceID)
-    try configureInputFormat()
-    try preallocateBuffers(for: deviceID)
-    try installInputCallback()
-    try createOutputFile(at: url)
-    try startAudioUnit()
-    installDeviceListeners()
+    do {
+      if !isPrepared(for: deviceID) {
+        try teardownPreparedAudioUnit()
+        currentDeviceID = deviceID
+        currentDeviceName = Self.queryDeviceName(deviceID) ?? "Unknown Device"
+
+        try createAudioUnit()
+        try bindInputDevice(deviceID)
+        try configureInputFormat()
+        try preallocateBuffers(for: deviceID)
+        try installInputCallback()
+      }
+
+      try createOutputFile(at: url)
+      try startAudioUnit()
+      installDeviceListeners()
+    } catch {
+      teardown()
+      throw error
+    }
 
     isRecording = true
 
@@ -78,34 +103,36 @@ final class CoreAudioInputCapture: @unchecked Sendable {
 
   func stopRecording() {
     uninstallDeviceListeners()
+    guard isRecording || audioFile != nil else { return }
 
-    if let unit = audioUnit {
-      AudioOutputUnitStop(unit)
-      AudioUnitUninitialize(unit)
-      AudioComponentInstanceDispose(unit)
-      audioUnit = nil
-    }
-
-    if let file = audioFile {
-      ExtAudioFileDispose(file)
-      audioFile = nil
-    }
-
-    if let renderBuffer {
-      renderBuffer.deallocate()
-      self.renderBuffer = nil
-    }
-
-    if let monoBuffer {
-      monoBuffer.deallocate()
-      self.monoBuffer = nil
-    }
-
-    bufferCapacityFrames = 0
+    let wasRecording = isRecording
     isRecording = false
-    currentDeviceID = 0
-    currentDeviceName = "Unknown Device"
-    hasReportedFailure = false
+    recordingActive.store(false, ordering: .releasing)
+
+    if wasRecording, let unit = audioUnit {
+      let stopStatus = AudioOutputUnitStop(unit)
+      if stopStatus != noErr {
+        logger.warning("AudioOutputUnitStop returned \(stopStatus)")
+      }
+
+      waitForRenderCallbacksToFinish()
+
+      let resetStatus = AudioUnitReset(unit, kAudioUnitScope_Global, 0)
+      if resetStatus != noErr {
+        logger.warning("AudioUnitReset returned \(resetStatus)")
+      }
+    }
+
+    closeOutputFile()
+  }
+
+  func teardown() {
+    stopRecording()
+    do {
+      try teardownPreparedAudioUnit()
+    } catch {
+      logger.fault("Failed to tear down audio capture: \(error.localizedDescription)")
+    }
   }
 
   private func createAudioUnit() throws {
@@ -128,6 +155,7 @@ final class CoreAudioInputCapture: @unchecked Sendable {
     }
 
     audioUnit = unit
+    isAudioUnitInitialized = false
 
     var enableInput: UInt32 = 1
     let enableStatus = AudioUnitSetProperty(
@@ -249,9 +277,10 @@ final class CoreAudioInputCapture: @unchecked Sendable {
       throw CoreAudioInputCaptureError.audioUnitNotInitialized
     }
 
+    let context = Unmanaged.passRetained(InputCallbackContext(capture: self))
     var callback = AURenderCallbackStruct(
       inputProc: Self.inputCallback,
-      inputProcRefCon: Unmanaged.passUnretained(self).toOpaque()
+      inputProcRefCon: context.toOpaque()
     )
 
     let status = AudioUnitSetProperty(
@@ -263,8 +292,10 @@ final class CoreAudioInputCapture: @unchecked Sendable {
       UInt32(MemoryLayout<AURenderCallbackStruct>.size)
     )
     guard status == noErr else {
+      context.release()
       throw CoreAudioInputCaptureError.failedToSetInputCallback(status: status)
     }
+    inputCallbackContext = context
   }
 
   private func createOutputFile(at url: URL) throws {
@@ -310,13 +341,17 @@ final class CoreAudioInputCapture: @unchecked Sendable {
       throw CoreAudioInputCaptureError.audioUnitNotInitialized
     }
 
-    let initializeStatus = AudioUnitInitialize(audioUnit)
-    guard initializeStatus == noErr else {
-      throw CoreAudioInputCaptureError.failedToInitializeAudioUnit(status: initializeStatus)
+    if !isAudioUnitInitialized {
+      let initializeStatus = AudioUnitInitialize(audioUnit)
+      guard initializeStatus == noErr else {
+        throw CoreAudioInputCaptureError.failedToInitializeAudioUnit(status: initializeStatus)
+      }
+      isAudioUnitInitialized = true
     }
 
     let maxAttempts = 5
     let retryDelay: TimeInterval = 0.25
+    recordingActive.store(true, ordering: .releasing)
 
     for attempt in 1...maxAttempts {
       let startStatus = AudioOutputUnitStart(audioUnit)
@@ -328,6 +363,7 @@ final class CoreAudioInputCapture: @unchecked Sendable {
         )
         Thread.sleep(forTimeInterval: retryDelay)
       } else {
+        recordingActive.store(false, ordering: .releasing)
         throw CoreAudioInputCaptureError.failedToStartAudioUnit(status: startStatus)
       }
     }
@@ -335,7 +371,8 @@ final class CoreAudioInputCapture: @unchecked Sendable {
 
   private static let inputCallback: AURenderCallback = {
     refCon, ioActionFlags, inTimeStamp, inBusNumber, inNumberFrames, _ in
-    let capture = Unmanaged<CoreAudioInputCapture>.fromOpaque(refCon).takeUnretainedValue()
+    let context = Unmanaged<InputCallbackContext>.fromOpaque(refCon).takeUnretainedValue()
+    guard let capture = context.capture else { return noErr }
     return capture.handleInput(
       ioActionFlags: ioActionFlags,
       inTimeStamp: inTimeStamp,
@@ -350,7 +387,12 @@ final class CoreAudioInputCapture: @unchecked Sendable {
     inBusNumber: UInt32,
     inNumberFrames: UInt32
   ) -> OSStatus {
-    guard isRecording,
+    renderCallbacksInFlight.wrappingIncrement(ordering: .acquiringAndReleasing)
+    defer {
+      renderCallbacksInFlight.wrappingDecrement(ordering: .acquiringAndReleasing)
+    }
+
+    guard recordingActive.load(ordering: .acquiring),
       let audioUnit,
       let audioFile,
       let renderBuffer,
@@ -435,6 +477,67 @@ final class CoreAudioInputCapture: @unchecked Sendable {
     }
 
     return noErr
+  }
+
+  private func waitForRenderCallbacksToFinish() {
+    // The output file cannot be finalized until callbacks that passed the atomic gate finish.
+    while renderCallbacksInFlight.load(ordering: .acquiring) > 0 {
+      Thread.sleep(forTimeInterval: 0.001)
+    }
+  }
+
+  private func isPrepared(for deviceID: AudioDeviceID) -> Bool {
+    audioUnit != nil && isAudioUnitInitialized && currentDeviceID == deviceID
+  }
+
+  private func closeOutputFile() {
+    if let file = audioFile {
+      ExtAudioFileDispose(file)
+      audioFile = nil
+    }
+  }
+
+  private func teardownPreparedAudioUnit() throws {
+    recordingActive.store(false, ordering: .releasing)
+
+    if let unit = audioUnit {
+      AudioOutputUnitStop(unit)
+      waitForRenderCallbacksToFinish()
+
+      if isAudioUnitInitialized {
+        let uninitializeStatus = AudioUnitUninitialize(unit)
+        if uninitializeStatus != noErr {
+          logger.warning("AudioUnitUninitialize returned \(uninitializeStatus)")
+        } else {
+          isAudioUnitInitialized = false
+        }
+      }
+
+      let disposeStatus = AudioComponentInstanceDispose(unit)
+      guard disposeStatus == noErr else {
+        throw CoreAudioInputCaptureError.failedToDisposeAudioUnit(status: disposeStatus)
+      }
+      audioUnit = nil
+      inputCallbackContext?.release()
+      inputCallbackContext = nil
+    }
+
+    isAudioUnitInitialized = false
+
+    if let renderBuffer {
+      renderBuffer.deallocate()
+      self.renderBuffer = nil
+    }
+
+    if let monoBuffer {
+      monoBuffer.deallocate()
+      self.monoBuffer = nil
+    }
+
+    bufferCapacityFrames = 0
+    currentDeviceID = 0
+    currentDeviceName = "Unknown Device"
+    hasReportedFailure = false
   }
 
   private func installDeviceListeners() {
@@ -643,6 +746,7 @@ enum CoreAudioInputCaptureError: LocalizedError {
   case failedToSetFileFormat(status: OSStatus)
   case failedToInitializeAudioUnit(status: OSStatus)
   case failedToStartAudioUnit(status: OSStatus)
+  case failedToDisposeAudioUnit(status: OSStatus)
 
   var errorDescription: String? {
     switch self {
@@ -676,6 +780,8 @@ enum CoreAudioInputCaptureError: LocalizedError {
       return "Failed to initialize audio capture (\(status))"
     case .failedToStartAudioUnit(let status):
       return "Failed to start audio capture (\(status))"
+    case .failedToDisposeAudioUnit(let status):
+      return "Failed to dispose audio capture (\(status))"
     }
   }
 }

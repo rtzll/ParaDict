@@ -78,7 +78,8 @@ final class AudioRecorder: Sendable {
     let dir = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-    let capture = CoreAudioInputCapture(controlQueue: hardwareQueue)
+    let capture = self.capture ?? CoreAudioInputCapture(controlQueue: hardwareQueue)
+    self.capture = capture
     let bridge = meterBridge
     capture.onRMS = { rms in
       bridge.store(rms)
@@ -102,7 +103,6 @@ final class AudioRecorder: Sendable {
       throw error
     }
 
-    self.capture = capture
     recordingURL = url
     recordingStartTime = Date()
     actualSampleRate = sessionInfo.sampleRate
@@ -226,7 +226,6 @@ final class AudioRecorder: Sendable {
       await runOnHardwareQueue {
         capture.stopRecording()
       }
-      self.capture = nil
     }
   }
 

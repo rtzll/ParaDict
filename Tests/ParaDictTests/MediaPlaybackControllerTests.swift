@@ -1,4 +1,3 @@
-import CoreAudio
 import XCTest
 
 @testable import ParaDict
@@ -9,7 +8,6 @@ final class FakeMediaRemote: MediaRemoteClient, @unchecked Sendable {
   var pauseShouldSucceed: Bool = true
   var playShouldSucceed: Bool = true
   var muteShouldSucceed: Bool = true
-  var bluetoothInputDeviceIDs: Set<AudioDeviceID> = []
   var eventLog: TestEventLog?
   private(set) var pauseCount = 0
   private(set) var playCount = 0
@@ -33,36 +31,6 @@ final class FakeMediaRemote: MediaRemoteClient, @unchecked Sendable {
     systemAudioMuted = muted
     return true
   }
-  func isBluetoothInputDevice(_ deviceID: AudioDeviceID) -> Bool {
-    bluetoothInputDeviceIDs.contains(deviceID)
-  }
-}
-
-private actor TestSleepGate {
-  private var requestedDurations: [Duration] = []
-  private var continuations: [CheckedContinuation<Void, Never>] = []
-
-  func sleep(for duration: Duration) async {
-    requestedDurations.append(duration)
-    await withCheckedContinuation { continuation in
-      continuations.append(continuation)
-    }
-  }
-
-  func waitForRequest() async {
-    while requestedDurations.isEmpty {
-      await Task.yield()
-    }
-  }
-
-  func firstRequestedDuration() -> Duration? {
-    requestedDurations.first
-  }
-
-  func releaseFirst() {
-    guard !continuations.isEmpty else { return }
-    continuations.removeFirst().resume()
-  }
 }
 
 private actor TestSleepRecorder {
@@ -79,93 +47,25 @@ private actor TestSleepRecorder {
 
 @MainActor
 final class MediaPlaybackControllerTests: XCTestCase {
-  func test_bluetoothInputDelaysRestorationUntilTheRouteSettles() async {
-    let fake = FakeMediaRemote()
-    fake.audioActive = true
-    fake.bluetoothInputDeviceIDs = [42]
-    let sleepGate = TestSleepGate()
-    let timing = MediaPlaybackTiming(
-      muteFallbackDelay: .zero,
-      bluetoothRestorationDelay: .seconds(1)
-    )
-    let controller = MediaPlaybackController(
-      client: fake,
-      timing: timing,
-      sleep: { duration in
-        if duration == .zero { return }
-        await sleepGate.sleep(for: duration)
-      }
-    )
-    controller.prepareForRecording(inputDeviceID: 42)
-    fake.audioActive = false
-
-    let restoration = Task { await controller.restoreAfterRecording() }
-    await sleepGate.waitForRequest()
-
-    XCTAssertEqual(fake.playCount, 0)
-    let requestedDuration = await sleepGate.firstRequestedDuration()
-    XCTAssertEqual(requestedDuration, .seconds(1))
-
-    await sleepGate.releaseFirst()
-    await restoration.value
-    XCTAssertEqual(fake.playCount, 1)
-  }
-
-  func test_nonBluetoothInputRestoresWithoutRouteSettleDelay() async {
+  func test_restoreDoesNotAddArtificialDelay() async {
     let fake = FakeMediaRemote()
     fake.audioActive = true
     let sleeps = TestSleepRecorder()
     let timing = MediaPlaybackTiming(
-      muteFallbackDelay: .zero,
-      bluetoothRestorationDelay: .seconds(1)
+      muteFallbackDelay: .zero
     )
     let controller = MediaPlaybackController(
       client: fake,
       timing: timing,
       sleep: { duration in await sleeps.record(duration) }
     )
-    controller.prepareForRecording(inputDeviceID: 7)
+    controller.prepareForRecording()
     fake.audioActive = false
 
     await controller.restoreAfterRecording()
 
     let recordedDurations = await sleeps.durations()
     XCTAssertFalse(recordedDurations.contains(.seconds(1)))
-    XCTAssertEqual(fake.playCount, 1)
-  }
-
-  func test_newRecordingInvalidatesPendingBluetoothRestoration() async {
-    let fake = FakeMediaRemote()
-    fake.audioActive = true
-    fake.bluetoothInputDeviceIDs = [42]
-    let sleepGate = TestSleepGate()
-    let timing = MediaPlaybackTiming(
-      muteFallbackDelay: .zero,
-      bluetoothRestorationDelay: .seconds(1)
-    )
-    let controller = MediaPlaybackController(
-      client: fake,
-      timing: timing,
-      sleep: { duration in
-        if duration == .zero { return }
-        await sleepGate.sleep(for: duration)
-      }
-    )
-    controller.prepareForRecording(inputDeviceID: 42)
-    fake.audioActive = false
-
-    let staleRestoration = Task { await controller.restoreAfterRecording() }
-    await sleepGate.waitForRequest()
-
-    fake.audioActive = true
-    controller.prepareForRecording(inputDeviceID: 7)
-    fake.audioActive = false
-    await sleepGate.releaseFirst()
-    await staleRestoration.value
-
-    XCTAssertEqual(fake.playCount, 0)
-
-    await controller.restoreAfterRecording()
     XCTAssertEqual(fake.playCount, 1)
   }
 

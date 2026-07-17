@@ -108,7 +108,7 @@ final class RecordingCaptureStartWorkflow: Sendable {
     for session: PendingRecordingSession,
     onPreviewUpdate: @escaping @MainActor (StreamingPreviewUpdate) -> Void
   ) async -> Bool {
-    mediaPlayback.prepareForRecording(inputDeviceID: session.resolvedDevice.deviceID)
+    mediaPlayback.prepareForRecording()
 
     do {
       try await recorder.startRecording(

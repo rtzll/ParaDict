@@ -14,13 +14,18 @@ let package = Package(
     .package(
       url: "https://github.com/FluidInference/FluidAudio.git",
       .upToNextMinor(from: "0.12.6")
-    )
+    ),
+    .package(
+      url: "https://github.com/apple/swift-atomics.git",
+      from: "1.3.0"
+    ),
   ],
   targets: [
     .executableTarget(
       name: "ParaDict",
       dependencies: [
-        "FluidAudio"
+        "FluidAudio",
+        .product(name: "Atomics", package: "swift-atomics"),
       ],
       path: "Sources/ParaDict",
       exclude: ["Resources"],
