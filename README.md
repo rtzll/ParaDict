@@ -2,7 +2,7 @@
 
 A macOS menu bar app for fast local transcription via [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3). Press a hotkey, speak, press again — pasted into the focused window. A cursor-following overlay shows the live preview as you speak. ParaDict was originally based on [MiniWhisper](https://github.com/andyhtran/MiniWhisper).
 
-<video src="https://github.com/user-attachments/assets/d0833c97-f295-4d2e-859c-e4b2886b65e4" width="800"></video>
+<video src="https://github.com/user-attachments/assets/b60cf8ef-7ace-4158-8d3c-66ac6920cf18" width="800"></video>
 
 ## Run
 
