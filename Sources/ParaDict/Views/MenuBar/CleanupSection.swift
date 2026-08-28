@@ -17,23 +17,28 @@ struct CleanupSection: View {
         )
       ) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("S1-mini by Superwhisper")
+          Text("Improve Transcripts")
             .font(.body)
             .foregroundColor(.primary)
 
           Text(statusText)
             .font(.caption)
             .foregroundColor(statusColor)
+            .lineLimit(1)
+            .contentTransition(.opacity)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .toggleStyle(.switch)
       .controlSize(.small)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 10)
-      .padding(.vertical, 6)
+      .padding(.vertical, 8)
       .background(
         RoundedRectangle(cornerRadius: 10)
           .fill(isHovering ? Color.primary.opacity(0.06) : Color.primary.opacity(0.04))
       )
+      .animation(.easeInOut(duration: 0.15), value: statusText)
       .accessibilityLabel("Transcript cleanup")
       .accessibilityValue(viewModel.snapshot.cleanup.status.description)
       .accessibilityHint(
@@ -45,14 +50,20 @@ struct CleanupSection: View {
         }
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private var statusText: String {
-    let status = viewModel.snapshot.cleanup.status
-    if status.status == .failed {
-      return "Load failed — will retry on next enable"
+    switch viewModel.snapshot.cleanup.status.status {
+    case .off:
+      return "S1-mini by Superwhisper"
+    case .preparing:
+      return "Loading S1-mini by Superwhisper…"
+    case .ready:
+      return "S1-mini by Superwhisper · Ready"
+    case .failed:
+      return "S1-mini by Superwhisper · Load failed"
     }
-    return status.description
   }
 
   private var statusColor: Color {
