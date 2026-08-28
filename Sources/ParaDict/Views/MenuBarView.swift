@@ -40,6 +40,7 @@ struct MenuBarView: View {
       VStack(spacing: 20) {
         MicrophoneSection()
         ShortcutSection()
+        CleanupSection()
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 14)

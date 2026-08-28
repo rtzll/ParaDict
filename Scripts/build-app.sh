@@ -22,6 +22,10 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
 
+# MLX (S1-mini cleanup) needs its compiled Metal shaders next to the executable.
+bash "$ROOT/Scripts/build-metallib.sh"
+cp "$ROOT/.build/metallib/mlx.metallib" "$APP_BUNDLE/Contents/MacOS/"
+
 cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -66,6 +70,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 PLIST
 
 cp "Sources/ParaDict/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+cp "THIRD_PARTY_NOTICES.md" "$APP_BUNDLE/Contents/Resources/"
 
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 

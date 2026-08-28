@@ -18,10 +18,28 @@ struct TranscriptionSegment: Codable, Equatable, Hashable, Identifiable, Sendabl
 
 struct TranscriptionResult: Sendable {
   let text: String
+  /// Original ASR text when `text` has been post-processed.
+  let rawText: String?
   let segments: [TranscriptionSegment]
   let language: String
   let duration: TimeInterval
   let model: String
+
+  init(
+    text: String,
+    rawText: String? = nil,
+    segments: [TranscriptionSegment],
+    language: String,
+    duration: TimeInterval,
+    model: String
+  ) {
+    self.text = text
+    self.rawText = rawText
+    self.segments = segments
+    self.language = language
+    self.duration = duration
+    self.model = model
+  }
 }
 
 struct SegmentsResult: Codable, Equatable, Sendable {

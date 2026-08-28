@@ -14,6 +14,7 @@ final class AppContainer {
     let recordingHistory = RecordingHistory()
     let permissions = PermissionsManager()
     let pasteboard = PasteboardService()
+    let cleanupService = S1MiniCleanupService()
 
     let recordingController = RecordingController(
       recorder: recorder,
@@ -22,7 +23,8 @@ final class AppContainer {
       toast: toast,
       transcriptionProvider: ParakeetProvider(),
       recordingHistory: recordingHistory,
-      pasteboardWriter: pasteboard
+      pasteboardWriter: pasteboard,
+      cleanupProvider: cleanupService
     )
 
     let hotkeyRouter = HotkeyRouter()
@@ -41,7 +43,8 @@ final class AppContainer {
       recordingHistory: recordingHistory,
       permissions: permissions,
       pasteboard: pasteboard,
-      hotkeyRouter: hotkeyRouter
+      hotkeyRouter: hotkeyRouter,
+      cleanupService: cleanupService
     )
     self.hotkeyRouter = hotkeyRouter
     bootstrap = AppBootstrap(

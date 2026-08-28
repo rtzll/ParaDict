@@ -112,6 +112,17 @@ final class TestPasteboardWriter: PasteboardWriting, @unchecked Sendable {
 }
 
 @MainActor
+final class TestCleanupProvider: TranscriptCleanupProviding, @unchecked Sendable {
+  var result: TranscriptCleanupResult = .unavailable
+  private(set) var receivedTexts: [String] = []
+
+  func cleanup(_ text: String) async -> TranscriptCleanupResult {
+    receivedTexts.append(text)
+    return result
+  }
+}
+
+@MainActor
 final class TestRecordingFeedbackPresenter: RecordingFeedbackPresenting, @unchecked Sendable {
   private(set) var feedback: [RecordingFeedback] = []
   private(set) var clearOverlayStatusCallCount = 0

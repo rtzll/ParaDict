@@ -57,7 +57,8 @@ final class RecordingController: Sendable {
     transcriptionProvider: TranscriptionProviding,
     modelReadiness: RecordingModelReadinessChecking? = nil,
     recordingHistory: RecordingHistoryWriting,
-    pasteboardWriter: PasteboardWriting
+    pasteboardWriter: PasteboardWriting,
+    cleanupProvider: (any TranscriptCleanupProviding)? = nil
   ) {
     self.recorder = recorder
     self.deviceManager = deviceManager
@@ -77,7 +78,8 @@ final class RecordingController: Sendable {
     transcriptionWorkflow = RecordingTranscriptionWorkflow(
       provider: transcriptionProvider,
       recordingHistory: recordingHistory,
-      pasteboardWriter: pasteboardWriter
+      pasteboardWriter: pasteboardWriter,
+      cleanupProvider: cleanupProvider
     )
     recordingSession = RecordingSession(
       recorder: recorder,

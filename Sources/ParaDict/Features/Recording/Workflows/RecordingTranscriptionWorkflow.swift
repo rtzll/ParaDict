@@ -11,15 +11,18 @@ final class RecordingTranscriptionWorkflow: Sendable {
   private let provider: TranscriptionProviding
   private let recordingHistory: RecordingHistoryWriting
   private let pasteboardWriter: PasteboardWriting
+  private let cleanupProvider: (any TranscriptCleanupProviding)?
 
   init(
     provider: TranscriptionProviding,
     recordingHistory: RecordingHistoryWriting,
-    pasteboardWriter: PasteboardWriting
+    pasteboardWriter: PasteboardWriting,
+    cleanupProvider: (any TranscriptCleanupProviding)? = nil
   ) {
     self.provider = provider
     self.recordingHistory = recordingHistory
     self.pasteboardWriter = pasteboardWriter
+    self.cleanupProvider = cleanupProvider
   }
 
   func process(_ capture: CompletedRecordingCapture) async -> RecordingTranscriptionOutcome {
@@ -31,12 +34,19 @@ final class RecordingTranscriptionWorkflow: Sendable {
         return .empty
       }
 
-      pasteboardWriter.copyAndPaste(result.text)
+      let finalResult = await applyingCleanup(to: result)
+
+      guard !finalResult.text.isEmpty else {
+        await recordingHistory.discardCapture(at: capture.audioURL)
+        return .empty
+      }
+
+      pasteboardWriter.copyAndPaste(finalResult.text)
 
       let recording = Recording.completed(
         id: capture.recordingId,
         audioURL: capture.audioURL,
-        transcriptionResult: result,
+        transcriptionResult: finalResult,
         duration: capture.duration,
         sampleRate: capture.sampleRate,
         inputDeviceName: capture.inputDeviceName
@@ -54,5 +64,24 @@ final class RecordingTranscriptionWorkflow: Sendable {
         ))
       return .failed(error.localizedDescription)
     }
+  }
+
+  /// Runs the transcript through the cleanup model when one is available;
+  /// keeps the raw text if cleanup is disabled, not ready, or fails.
+  private func applyingCleanup(to result: TranscriptionResult) async -> TranscriptionResult {
+    guard let cleanupProvider else { return result }
+
+    guard case .cleaned(let cleanedText) = await cleanupProvider.cleanup(result.text) else {
+      return result
+    }
+
+    return TranscriptionResult(
+      text: cleanedText,
+      rawText: result.text,
+      segments: result.segments,
+      language: result.language,
+      duration: result.duration,
+      model: result.model
+    )
   }
 }

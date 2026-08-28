@@ -132,6 +132,137 @@ struct RecordingTranscriptionWorkflowTests {
     #expect(recordings.failedRecordings[0].id == "recording-save-error")
   }
 
+  @Test func cleanupReplacesTextForPasteAndHistory() async throws {
+    let provider = TestTranscriptionProvider()
+    provider.result = TranscriptionResult(
+      text: "hello world",
+      segments: [],
+      language: "en",
+      duration: 0.4,
+      model: "test"
+    )
+    let cleanup = TestCleanupProvider()
+    cleanup.result = .cleaned("Hello, world!")
+    let recordings = TestRecordingPersistence()
+    let pasteboard = TestPasteboardWriter()
+    let workflow = RecordingTranscriptionWorkflow(
+      provider: provider,
+      recordingHistory: recordings,
+      pasteboardWriter: pasteboard,
+      cleanupProvider: cleanup
+    )
+
+    let outcome = await workflow.process(
+      try makeCapture(
+        recordingId: "recording-cleanup",
+        fileName: "cleanup.wav",
+        fileSize: 8
+      ))
+
+    #expect(outcome == .succeeded)
+    #expect(cleanup.receivedTexts == ["hello world"])
+    #expect(pasteboard.copiedTexts == ["Hello, world!"])
+    #expect(recordings.completedRecordings.count == 1)
+    #expect(recordings.completedRecordings[0].transcription?.text == "Hello, world!")
+    #expect(recordings.completedRecordings[0].transcription?.rawText == "hello world")
+  }
+
+  @Test func cleanupFallbackKeepsRawText() async throws {
+    let provider = TestTranscriptionProvider()
+    provider.result = TranscriptionResult(
+      text: "hello world",
+      segments: [],
+      language: "en",
+      duration: 0.4,
+      model: "test"
+    )
+    let cleanup = TestCleanupProvider()
+    cleanup.result = .unavailable
+    let recordings = TestRecordingPersistence()
+    let pasteboard = TestPasteboardWriter()
+    let workflow = RecordingTranscriptionWorkflow(
+      provider: provider,
+      recordingHistory: recordings,
+      pasteboardWriter: pasteboard,
+      cleanupProvider: cleanup
+    )
+
+    let outcome = await workflow.process(
+      try makeCapture(
+        recordingId: "recording-cleanup-fallback",
+        fileName: "cleanup-fallback.wav",
+        fileSize: 8
+      ))
+
+    #expect(outcome == .succeeded)
+    #expect(pasteboard.copiedTexts == ["hello world"])
+    #expect(recordings.completedRecordings[0].transcription?.text == "hello world")
+    #expect(recordings.completedRecordings[0].transcription?.rawText == nil)
+  }
+
+  @Test func emptyCleanupResultDiscardsFillerWithoutPasting() async throws {
+    let provider = TestTranscriptionProvider()
+    provider.result = TranscriptionResult(
+      text: "um",
+      segments: [],
+      language: "en",
+      duration: 0.2,
+      model: "test"
+    )
+    let cleanup = TestCleanupProvider()
+    cleanup.result = .cleaned("")
+    let recordings = TestRecordingPersistence()
+    let pasteboard = TestPasteboardWriter()
+    let workflow = RecordingTranscriptionWorkflow(
+      provider: provider,
+      recordingHistory: recordings,
+      pasteboardWriter: pasteboard,
+      cleanupProvider: cleanup
+    )
+
+    let outcome = await workflow.process(
+      try makeCapture(
+        recordingId: "recording-cleanup-empty",
+        fileName: "cleanup-empty.wav",
+        fileSize: 8
+      ))
+
+    #expect(outcome == .empty)
+    #expect(cleanup.receivedTexts == ["um"])
+    #expect(pasteboard.copiedTexts.isEmpty)
+    #expect(recordings.completedRecordings.isEmpty)
+    #expect(recordings.discardedAudioURLs.count == 1)
+  }
+
+  @Test func cleanupSkippedWhenProviderReturnsNothingUsable() async throws {
+    let provider = TestTranscriptionProvider()
+    provider.result = TranscriptionResult(
+      text: "hello world",
+      segments: [],
+      language: "en",
+      duration: 0.4,
+      model: "test"
+    )
+    let recordings = TestRecordingPersistence()
+    let pasteboard = TestPasteboardWriter()
+    let workflow = RecordingTranscriptionWorkflow(
+      provider: provider,
+      recordingHistory: recordings,
+      pasteboardWriter: pasteboard,
+      cleanupProvider: nil
+    )
+
+    let outcome = await workflow.process(
+      try makeCapture(
+        recordingId: "recording-no-cleanup",
+        fileName: "no-cleanup.wav",
+        fileSize: 8
+      ))
+
+    #expect(outcome == .succeeded)
+    #expect(pasteboard.copiedTexts == ["hello world"])
+  }
+
   private func makeCapture(recordingId: String, fileName: String, fileSize: Int) throws
     -> CompletedRecordingCapture
   {

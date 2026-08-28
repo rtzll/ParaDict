@@ -16,10 +16,28 @@ struct RecordingInfo: Codable, Equatable, Hashable, Sendable {
 
 struct RecordingTranscription: Codable, Equatable, Hashable, Sendable {
   let text: String
+  /// Original ASR text when `text` contains a post-processed transcript.
+  let rawText: String?
   let segments: [TranscriptionSegment]
   let language: String
   let model: String
   let transcriptionDuration: TimeInterval
+
+  init(
+    text: String,
+    rawText: String? = nil,
+    segments: [TranscriptionSegment],
+    language: String,
+    model: String,
+    transcriptionDuration: TimeInterval
+  ) {
+    self.text = text
+    self.rawText = rawText
+    self.segments = segments
+    self.language = language
+    self.model = model
+    self.transcriptionDuration = transcriptionDuration
+  }
 }
 
 struct RecordingConfiguration: Codable, Equatable, Hashable, Sendable {
@@ -117,6 +135,7 @@ struct Recording: Codable, Identifiable, Equatable, Hashable, Sendable {
       ),
       transcription: RecordingTranscription(
         text: transcriptionResult.text,
+        rawText: transcriptionResult.rawText,
         segments: transcriptionResult.segments,
         language: transcriptionResult.language,
         model: transcriptionResult.model,

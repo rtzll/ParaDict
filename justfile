@@ -17,9 +17,13 @@ dev: kill package
     for fw in "{{install_path}}"/Contents/Frameworks/*.framework; do
         [ -d "$fw" ] && codesign --force --sign "{{dev_signing_id}}" "$fw"
     done
+    # Metal libraries in Contents/MacOS are nested code and must be signed first.
+    codesign --force --sign "{{dev_signing_id}}" \
+        "{{install_path}}/Contents/MacOS/mlx.metallib"
     codesign --force --sign "{{dev_signing_id}}" \
         --entitlements build/ParaDict.entitlements \
         "{{install_path}}"
+    codesign --verify --deep --strict "{{install_path}}"
     rm -rf build/{{app_name}}.app
     open "{{install_path}}"
 
@@ -57,6 +61,17 @@ lint:
 [group('build')]
 test:
     swift test --disable-sandbox
+
+# Run an opt-in smoke test against the real local S1-mini model
+[group('build')]
+s1-smoke-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    swift build --build-tests --disable-sandbox
+    bash Scripts/build-metallib.sh
+    bin_path=$(swift build --show-bin-path)
+    cp .build/metallib/mlx.metallib "$bin_path/ParaDictPackageTests.xctest/Contents/MacOS/"
+    PARADICT_S1_SMOKE_TEST=1 swift test --disable-sandbox --skip-build --filter S1MiniCleanupSmokeTests
 
 # Remove build artifacts
 [group('build')]

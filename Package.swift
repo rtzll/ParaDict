@@ -19,6 +19,10 @@ let package = Package(
       url: "https://github.com/apple/swift-atomics.git",
       from: "1.3.0"
     ),
+    .package(
+      url: "https://github.com/ml-explore/mlx-swift-lm",
+      .upToNextMinor(from: "2.31.3")
+    ),
   ],
   targets: [
     .executableTarget(
@@ -26,6 +30,8 @@ let package = Package(
       dependencies: [
         "FluidAudio",
         .product(name: "Atomics", package: "swift-atomics"),
+        .product(name: "MLXLLM", package: "mlx-swift-lm"),
+        .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
       ],
       path: "Sources/ParaDict",
       exclude: ["Resources"],

@@ -18,6 +18,7 @@ struct MenuBarSnapshot: Sendable {
   let recentHistoryItems: [Recording]
   let statistics: RecordingStatistics
   let toggleRecordingShortcut: CustomShortcut?
+  let cleanup: CleanupMenuPresentation
 }
 
 @Observable
@@ -28,6 +29,7 @@ final class MenuBarViewModel: Sendable {
   private let permissions: PermissionsManager
   private let pasteboard: PasteboardService
   private let hotkeyRouter: HotkeyRouter
+  private let cleanupService: S1MiniCleanupService
   private let openRecordingsFolderAction: @MainActor () -> Void
   private let quitApplicationAction: @MainActor () -> Void
 
@@ -37,6 +39,7 @@ final class MenuBarViewModel: Sendable {
     permissions: PermissionsManager,
     pasteboard: PasteboardService,
     hotkeyRouter: HotkeyRouter,
+    cleanupService: S1MiniCleanupService = S1MiniCleanupService(),
     openRecordingsFolderAction: @escaping @MainActor () -> Void = {
       NSWorkspace.shared.selectFile(
         nil,
@@ -52,6 +55,7 @@ final class MenuBarViewModel: Sendable {
     self.permissions = permissions
     self.pasteboard = pasteboard
     self.hotkeyRouter = hotkeyRouter
+    self.cleanupService = cleanupService
     self.openRecordingsFolderAction = openRecordingsFolderAction
     self.quitApplicationAction = quitApplicationAction
   }
@@ -73,7 +77,8 @@ final class MenuBarViewModel: Sendable {
       availableDevices: recording.audioDevice.availableDevices,
       recentHistoryItems: recordingHistory.recentHistoryItems,
       statistics: recordingHistory.statistics,
-      toggleRecordingShortcut: CustomShortcutStorage.get(.toggleRecording)
+      toggleRecordingShortcut: CustomShortcutStorage.get(.toggleRecording),
+      cleanup: cleanupService.menuPresentation
     )
   }
 
@@ -87,6 +92,10 @@ final class MenuBarViewModel: Sendable {
 
   func updateToggleRecordingShortcut(_ shortcut: CustomShortcut?) {
     hotkeyRouter.updateShortcut(shortcut, for: .toggleRecording)
+  }
+
+  func setCleanupEnabled(_ enabled: Bool) {
+    cleanupService.setEnabled(enabled)
   }
 
   func retryModelLoading() {
