@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -23,9 +23,9 @@ jobs:
           path: |
             .build
             ~/.swiftpm
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-26-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-26-spm-
 
       - run: just lint
       - run: just build
