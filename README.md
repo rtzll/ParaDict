@@ -23,6 +23,13 @@ first use, runs on-device with MLX, and falls back to the original transcript if
 
 If `just dev` fails because the signing identity is missing, open Keychain Access, create a new self-signed certificate, choose `Code Signing`, name it `local-dev`, then rerun `just dev` or set `DEV_CODESIGN_IDENTITY` to a different installed identity.
 
+If the build fails with `cannot execute tool 'metal' due to missing Metal Toolchain`, install Xcode's optional Metal toolchain and rerun the build:
+
+```bash
+xcodebuild -downloadComponent MetalToolchain
+just update
+```
+
 ## License
 
 [MIT](LICENSE)
