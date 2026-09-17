@@ -1,12 +1,16 @@
-import SwiftUI
+import AppKit
 
 @main
-struct ParaDictApp: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+@MainActor
+enum ParaDictApp {
+  static func main() {
+    let application = NSApplication.shared
+    let delegate = AppDelegate()
+    application.delegate = delegate
 
-  var body: some Scene {
-    // Status item and popover are managed by AppDelegate.
-    // A scene is still required to keep the SwiftUI lifecycle alive.
-    Settings { EmptyView() }
+    // NSApplication's delegate is weak; retain it for the entire event loop.
+    withExtendedLifetime(delegate) {
+      application.run()
+    }
   }
 }
