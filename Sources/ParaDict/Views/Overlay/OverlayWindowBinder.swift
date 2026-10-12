@@ -20,7 +20,7 @@ final class OverlayWindowBinder {
   private func observe() {
     withObservationTracking {
       _ = self.recordingController.overlaySnapshot
-    } onChange: {
+    } onChange: { [weak self] in
       Task { @MainActor [weak self] in
         guard let self else { return }
         windowController.update(recordingController.overlaySnapshot)

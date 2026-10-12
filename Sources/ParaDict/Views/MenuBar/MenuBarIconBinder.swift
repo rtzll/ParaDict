@@ -22,7 +22,7 @@ final class MenuBarIconBinder {
     withObservationTracking {
       _ = self.recordingController.displayState
       _ = self.recordingController.recorder.meterLevel
-    } onChange: {
+    } onChange: { [weak self] in
       Task { @MainActor [weak self] in
         self?.updateIcon()
         self?.observe()
